@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rust.chat",
+  "version": "0.1.0",
+  "identifier": "app.rust.chat",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../build",
+    "devtools": true
+  },
+  "app": {
+    "windows": [{
+      "title": "Rust.chat",
+      "width": 1200,
+      "height": 800,
+      "resizable": true,
+      "fullscreen": false
+    }],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": true, "targets": "all" }
+}
