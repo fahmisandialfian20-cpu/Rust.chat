@@ -1,1 +1,8 @@
 ﻿.worktrees/
+
+# Dependencies
+node_modules/
+target/
+
+# Package lock (regenerate with npm install)
+apps/web/package-lock.json
