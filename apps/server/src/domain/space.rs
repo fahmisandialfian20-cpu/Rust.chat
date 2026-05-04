@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Space {
     pub id: Uuid,
     pub name: String,
@@ -16,7 +17,7 @@ pub struct Space {
     pub updated_at: OffsetDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub enum SpaceVisibility {
     Public,
     Private,
@@ -48,14 +49,14 @@ impl Default for SpaceVisibility {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateSpace {
     pub name: String,
     pub description: Option<String>,
     pub visibility: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateSpace {
     pub name: Option<String>,
     pub description: Option<String>,

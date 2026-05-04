@@ -12,6 +12,7 @@
   import MessageList from '$lib/components/chat/MessageList.svelte';
   import MessageComposer from '$lib/components/chat/MessageComposer.svelte';
   import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte';
+  import MediaButton from '$lib/components/media/MediaButton.svelte';
   import type { Message } from '$lib/schemas/messages';
 
   type ViewState = 'loading' | 'loaded' | 'error' | 'forbidden' | 'notfound';
@@ -19,7 +20,7 @@
   let viewState: ViewState = $state('loading');
   let channelName = $state('');
   let channelKind = $state<string | null>(null);
-  let flags = $state<{ text_enabled: boolean } | null>(null);
+  let flags = $state<{ text_enabled: boolean; voice_group_enabled: boolean; video_group_enabled: boolean } | null>(null);
   let messages: Message[] = $state([]);
   let sending = $state(false);
   let errorMessage = $state('');
@@ -165,6 +166,15 @@
         {channelName}
       {/if}
     </h1>
+    <div class="ml-auto">
+      {#if viewState === 'loaded' && flags}
+        {#if channelKind === 'Voice'}
+          <MediaButton {channelId} {spaceId} mode="voice" voiceGroupEnabled={flags.voice_group_enabled} videoGroupEnabled={flags.video_group_enabled} />
+        {:else if channelKind === 'Video'}
+          <MediaButton {channelId} {spaceId} mode="video" voiceGroupEnabled={flags.voice_group_enabled} videoGroupEnabled={flags.video_group_enabled} />
+        {/if}
+      {/if}
+    </div>
   </header>
 
   {#if viewState === 'loading'}

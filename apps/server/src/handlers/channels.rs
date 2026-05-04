@@ -5,13 +5,14 @@ use axum::{
 };
 use serde::Deserialize;
 use uuid::Uuid;
+use utoipa::ToSchema;
 
 use crate::auth::middleware::AuthUser;
 use crate::domain::channel::{Channel, CreateChannel, UpdateChannel, ChannelFeatureFlags, ChannelFeatureFlagsUpdate};
 use crate::state::AppState;
 use crate::error::AppError;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct ListQuery {
     #[serde(default = "default_limit")]
     limit: i64,
@@ -22,15 +23,58 @@ pub struct ListQuery {
 fn default_limit() -> i64 { 50 }
 fn default_offset() -> i64 { 0 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/spaces/{space_id}/channels",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+    ),
+    request_body = CreateChannel,
+    responses(
+        (status = 200, description = "Channel created", body = Channel),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn create_channel(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path(space_id): Path<Uuid>,
     Json(payload): Json<CreateChannel>,
 ) -> Result<Json<Channel>, AppError> {
-    let channel = state.channel_service.create_channel(space_id, Uuid::nil(), payload).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    let channel = state.channel_service.create_channel(space_id, user_id, payload).await?;
+    state
+        .audit_service
+        .log(
+            crate::services::audit_service::CHANNEL_CREATE,
+            user_id,
+            Some(space_id),
+            None,
+            None,
+            Some(channel.id),
+            None,
+            None,
+        )
+        .await?;
     Ok(Json(channel))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/{space_id}/channels/{channel_id}",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("channel_id" = Uuid, Path, description = "Channel UUID"),
+    ),
+    responses(
+        (status = 200, description = "Channel found", body = Channel),
+        (status = 404, description = "Channel not found"),
+    ),
+)]
 pub async fn get_channel(
     State(state): State<AppState>,
     Path((_space_id, channel_id)): Path<(Uuid, Uuid)>,
@@ -39,6 +83,19 @@ pub async fn get_channel(
     Ok(Json(channel))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/{space_id}/channels/slug/{slug}",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("slug" = String, Path, description = "Channel slug"),
+    ),
+    responses(
+        (status = 200, description = "Channel found", body = Channel),
+        (status = 404, description = "Channel not found"),
+    ),
+)]
 pub async fn get_channel_by_slug(
     State(state): State<AppState>,
     Path((space_id, slug)): Path<(Uuid, String)>,
@@ -47,6 +104,19 @@ pub async fn get_channel_by_slug(
     Ok(Json(channel))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/{space_id}/channels",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("limit" = Option<i64>, Query, description = "Page limit"),
+        ("offset" = Option<i64>, Query, description = "Page offset"),
+    ),
+    responses(
+        (status = 200, description = "List of channels", body = Vec<Channel>),
+    ),
+)]
 pub async fn list_channels(
     State(state): State<AppState>,
     Path(space_id): Path<Uuid>,
@@ -56,6 +126,22 @@ pub async fn list_channels(
     Ok(Json(channels))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/{space_id}/channels/visible",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("limit" = Option<i64>, Query, description = "Page limit"),
+        ("offset" = Option<i64>, Query, description = "Page offset"),
+    ),
+    responses(
+        (status = 200, description = "Visible channels", body = Vec<Channel>),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn list_visible_channels(
     State(state): State<AppState>,
     auth_user: AuthUser,
@@ -67,6 +153,20 @@ pub async fn list_visible_channels(
     Ok(Json(channels))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/spaces/{space_id}/channels/{channel_id}",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("channel_id" = Uuid, Path, description = "Channel UUID"),
+    ),
+    request_body = UpdateChannel,
+    responses(
+        (status = 200, description = "Channel updated", body = Channel),
+        (status = 404, description = "Channel not found"),
+    ),
+)]
 pub async fn update_channel(
     State(state): State<AppState>,
     Path((_space_id, channel_id)): Path<(Uuid, Uuid)>,
@@ -76,6 +176,19 @@ pub async fn update_channel(
     Ok(Json(channel))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/spaces/{space_id}/channels/{channel_id}",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("channel_id" = Uuid, Path, description = "Channel UUID"),
+    ),
+    responses(
+        (status = 204, description = "Channel archived"),
+        (status = 404, description = "Channel not found"),
+    ),
+)]
 pub async fn archive_channel(
     State(state): State<AppState>,
     Path((_space_id, channel_id)): Path<(Uuid, Uuid)>,
@@ -84,14 +197,58 @@ pub async fn archive_channel(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/spaces/{space_id}/channels/{channel_id}/hard",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("channel_id" = Uuid, Path, description = "Channel UUID"),
+    ),
+    responses(
+        (status = 204, description = "Channel permanently deleted"),
+        (status = 404, description = "Channel not found"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn delete_channel(
     State(state): State<AppState>,
-    Path((_space_id, channel_id)): Path<(Uuid, Uuid)>,
+    auth_user: AuthUser,
+    Path((space_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, AppError> {
+    let user_id = auth_user.user_id_uuid()?;
     state.channel_service.delete_channel(channel_id).await?;
+    state
+        .audit_service
+        .log(
+            crate::services::audit_service::CHANNEL_DELETE,
+            user_id,
+            Some(space_id),
+            None,
+            None,
+            Some(channel_id),
+            None,
+            None,
+        )
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/{space_id}/channels/{channel_id}/feature-flags",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("channel_id" = Uuid, Path, description = "Channel UUID"),
+    ),
+    responses(
+        (status = 200, description = "Channel feature flags", body = ChannelFeatureFlags),
+        (status = 404, description = "Channel not found"),
+    ),
+)]
 pub async fn get_channel_feature_flags(
     State(state): State<AppState>,
     Path((_space_id, channel_id)): Path<(Uuid, Uuid)>,
@@ -100,6 +257,20 @@ pub async fn get_channel_feature_flags(
     Ok(Json(flags))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/spaces/{space_id}/channels/{channel_id}/feature-flags",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("channel_id" = Uuid, Path, description = "Channel UUID"),
+    ),
+    request_body = ChannelFeatureFlagsUpdate,
+    responses(
+        (status = 200, description = "Feature flags updated", body = ChannelFeatureFlags),
+        (status = 404, description = "Channel not found"),
+    ),
+)]
 pub async fn update_channel_feature_flags(
     State(state): State<AppState>,
     Path((_space_id, channel_id)): Path<(Uuid, Uuid)>,
@@ -109,6 +280,20 @@ pub async fn update_channel_feature_flags(
     Ok(Json(flags))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/spaces/{space_id}/channels/{channel_id}/members/{user_id}",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("channel_id" = Uuid, Path, description = "Channel UUID"),
+        ("user_id" = Uuid, Path, description = "User UUID"),
+    ),
+    responses(
+        (status = 204, description = "Member added to channel"),
+        (status = 404, description = "Channel or user not found"),
+    ),
+)]
 pub async fn add_channel_member(
     State(state): State<AppState>,
     Path((_space_id, channel_id, user_id)): Path<(Uuid, Uuid, Uuid)>,
@@ -117,6 +302,20 @@ pub async fn add_channel_member(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/spaces/{space_id}/channels/{channel_id}/members/{user_id}",
+    tag = "channels",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("channel_id" = Uuid, Path, description = "Channel UUID"),
+        ("user_id" = Uuid, Path, description = "User UUID"),
+    ),
+    responses(
+        (status = 204, description = "Member removed from channel"),
+        (status = 404, description = "Channel or user not found"),
+    ),
+)]
 pub async fn remove_channel_member(
     State(state): State<AppState>,
     Path((_space_id, channel_id, user_id)): Path<(Uuid, Uuid, Uuid)>,

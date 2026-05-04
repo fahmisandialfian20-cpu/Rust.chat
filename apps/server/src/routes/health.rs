@@ -8,11 +8,28 @@ pub fn router() -> Router<AppState> {
         .route("/readyz", get(readyz))
 }
 
-async fn healthz() -> &'static str {
+#[utoipa::path(
+    get,
+    path = "/healthz",
+    tag = "health",
+    responses(
+        (status = 200, description = "Server is healthy", body = String),
+    ),
+)]
+pub async fn healthz() -> &'static str {
     "OK"
 }
 
-async fn readyz(axum::extract::State(state): axum::extract::State<AppState>) -> Result<&'static str, AppError> {
+#[utoipa::path(
+    get,
+    path = "/readyz",
+    tag = "health",
+    responses(
+        (status = 200, description = "Server is ready (DB + Redis connected)", body = String),
+        (status = 503, description = "Database or Redis not ready"),
+    ),
+)]
+pub async fn readyz(axum::extract::State(state): axum::extract::State<AppState>) -> Result<&'static str, AppError> {
     sqlx::query("SELECT 1")
         .execute(&state.db)
         .await

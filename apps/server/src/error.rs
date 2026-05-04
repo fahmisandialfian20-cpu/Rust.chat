@@ -1,5 +1,5 @@
 use axum::{
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -28,10 +28,19 @@ pub enum AppError {
     
     #[error("Service unavailable: {0}")]
     ServiceUnavailable(String),
+
+    #[error("Too many requests: {0}")]
+    TooManyRequests(String, u64),
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        let retry_after = if let AppError::TooManyRequests(_, secs) = &self {
+            Some(*secs)
+        } else {
+            None
+        };
+
         let (status, error_message) = match self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
@@ -40,8 +49,16 @@ impl IntoResponse for AppError {
             AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
             AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
+            AppError::TooManyRequests(msg, _) => (StatusCode::TOO_MANY_REQUESTS, msg),
         };
+
         let body = Json(json!({ "error": error_message }));
-        (status, body).into_response()
+        let mut response = (status, body).into_response();
+        if let Some(secs) = retry_after {
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, secs.to_string().parse().unwrap());
+        }
+        response
     }
 }

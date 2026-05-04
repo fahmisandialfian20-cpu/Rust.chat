@@ -5,12 +5,14 @@ use axum::{
 };
 use serde::Serialize;
 use uuid::Uuid;
+use utoipa::ToSchema;
 
 use crate::domain::file_object::FileObject;
 use crate::error::AppError;
+use crate::middleware::rate_limit;
 use crate::state::AppState;
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct UploadResponse {
     pub file: FileObject,
     pub download_url: String,
@@ -27,12 +29,30 @@ fn extract_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Result<
     Uuid::parse_str(&claims.claims.sub).map_err(|_| AppError::Unauthorized("Invalid user".to_string()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/files/upload",
+    tag = "files",
+    responses(
+        (status = 200, description = "File uploaded", body = UploadResponse),
+        (status = 401, description = "Unauthorized"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn upload_file(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     mut multipart: Multipart,
 ) -> Result<Json<UploadResponse>, AppError> {
     let user_id = extract_user_id(&state, &headers)?;
+
+    let key = rate_limit::upload_key(&user_id.to_string());
+    state
+        .rate_limiter
+        .check(&key, state.config.rate_limit.file_upload, 60)
+        .await?;
 
     let mut filename = String::new();
     let mut content_type = String::new();
@@ -77,11 +97,41 @@ pub async fn upload_file(
         data,
     ).await?;
 
+    state
+        .audit_service
+        .log(
+            crate::services::audit_service::FILE_UPLOAD,
+            user_id,
+            space_id,
+            None,
+            None,
+            channel_id,
+            None,
+            None,
+        )
+        .await?;
+
     let download_url = state.file_service.get_download_url(file.id, user_id).await?;
 
     Ok(Json(UploadResponse { file, download_url }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/files/{file_id}",
+    tag = "files",
+    params(
+        ("file_id" = Uuid, Path, description = "File UUID"),
+    ),
+    responses(
+        (status = 200, description = "File metadata", body = FileObject),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "File not found"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn get_file(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
@@ -93,6 +143,22 @@ pub async fn get_file(
     Ok(Json(file))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/files/{file_id}",
+    tag = "files",
+    params(
+        ("file_id" = Uuid, Path, description = "File UUID"),
+    ),
+    responses(
+        (status = 204, description = "File deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "File not found"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn delete_file(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
@@ -100,6 +166,19 @@ pub async fn delete_file(
 ) -> Result<StatusCode, AppError> {
     let user_id = extract_user_id(&state, &headers)?;
     state.file_service.delete_file(file_id, user_id).await?;
+    state
+        .audit_service
+        .log(
+            crate::services::audit_service::FILE_DELETE,
+            user_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

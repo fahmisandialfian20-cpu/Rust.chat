@@ -7,6 +7,8 @@ pub struct AppConfig {
     pub redis: RedisConfig,
     pub auth: AuthConfig,
     pub storage: StorageConfig,
+    pub livekit: LiveKitConfig,
+    pub rate_limit: RateLimitConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -38,6 +40,23 @@ pub struct AuthConfig {
 pub struct StorageConfig {
     pub provider: String,
     pub local_dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct LiveKitConfig {
+    pub enabled: bool,
+    pub url: String,
+    pub api_key: String,
+    pub api_secret: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct RateLimitConfig {
+    pub login: u64,
+    pub register: u64,
+    pub message_send: u64,
+    pub file_upload: u64,
+    pub ws_connect: u64,
 }
 
 impl AppConfig {
@@ -78,6 +97,40 @@ impl AppConfig {
             storage: StorageConfig {
                 provider: std::env::var("STORAGE_PROVIDER").unwrap_or_else(|_| "local".to_string()),
                 local_dir: std::env::var("LOCAL_STORAGE_DIR").ok(),
+            },
+            livekit: LiveKitConfig {
+                enabled: std::env::var("LIVEKIT_ENABLED")
+                    .unwrap_or_else(|_| "false".to_string())
+                    .parse()
+                    .unwrap_or(false),
+                url: std::env::var("LIVEKIT_URL")
+                    .unwrap_or_else(|_| "ws://localhost:7880".to_string()),
+                api_key: std::env::var("LIVEKIT_API_KEY")
+                    .unwrap_or_else(|_| "devkey".to_string()),
+                api_secret: std::env::var("LIVEKIT_API_SECRET")
+                    .unwrap_or_else(|_| "secret".to_string()),
+            },
+            rate_limit: RateLimitConfig {
+                login: std::env::var("RATE_LIMIT_LOGIN")
+                    .unwrap_or_else(|_| "5".to_string())
+                    .parse()
+                    .unwrap_or(5),
+                register: std::env::var("RATE_LIMIT_REGISTER")
+                    .unwrap_or_else(|_| "5".to_string())
+                    .parse()
+                    .unwrap_or(5),
+                message_send: std::env::var("RATE_LIMIT_MESSAGE_SEND")
+                    .unwrap_or_else(|_| "30".to_string())
+                    .parse()
+                    .unwrap_or(30),
+                file_upload: std::env::var("RATE_LIMIT_FILE_UPLOAD")
+                    .unwrap_or_else(|_| "10".to_string())
+                    .parse()
+                    .unwrap_or(10),
+                ws_connect: std::env::var("RATE_LIMIT_WS_CONNECT")
+                    .unwrap_or_else(|_| "20".to_string())
+                    .parse()
+                    .unwrap_or(20),
             },
         }
     }

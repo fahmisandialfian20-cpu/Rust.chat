@@ -5,13 +5,15 @@ use axum::{
 };
 use serde::Deserialize;
 use uuid::Uuid;
+use utoipa::ToSchema;
 
+use crate::auth::middleware::AuthUser;
 use crate::domain::space::{Space, CreateSpace, UpdateSpace};
 use crate::domain::membership::{SpaceMembership, AddMember};
 use crate::state::AppState;
 use crate::error::AppError;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct ListQuery {
     #[serde(default = "default_limit")]
     limit: i64,
@@ -22,14 +24,53 @@ pub struct ListQuery {
 fn default_limit() -> i64 { 50 }
 fn default_offset() -> i64 { 0 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/spaces",
+    tag = "spaces",
+    request_body = CreateSpace,
+    responses(
+        (status = 200, description = "Space created", body = Space),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn create_space(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(payload): Json<CreateSpace>,
 ) -> Result<Json<Space>, AppError> {
-    let space = state.space_service.create_space(Uuid::nil(), payload).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    let space = state.space_service.create_space(user_id, payload).await?;
+    state
+        .audit_service
+        .log(
+            crate::services::audit_service::SPACE_CREATE,
+            user_id,
+            Some(space.id),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await?;
     Ok(Json(space))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/{space_id}",
+    tag = "spaces",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+    ),
+    responses(
+        (status = 200, description = "Space found", body = Space),
+        (status = 404, description = "Space not found"),
+    ),
+)]
 pub async fn get_space(
     State(state): State<AppState>,
     Path(space_id): Path<Uuid>,
@@ -38,6 +79,18 @@ pub async fn get_space(
     Ok(Json(space))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/slug/{slug}",
+    tag = "spaces",
+    params(
+        ("slug" = String, Path, description = "Space slug"),
+    ),
+    responses(
+        (status = 200, description = "Space found", body = Space),
+        (status = 404, description = "Space not found"),
+    ),
+)]
 pub async fn get_space_by_slug(
     State(state): State<AppState>,
     Path(slug): Path<String>,
@@ -46,6 +99,18 @@ pub async fn get_space_by_slug(
     Ok(Json(space))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces",
+    tag = "spaces",
+    params(
+        ("limit" = Option<i64>, Query, description = "Page limit"),
+        ("offset" = Option<i64>, Query, description = "Page offset"),
+    ),
+    responses(
+        (status = 200, description = "List of spaces", body = Vec<Space>),
+    ),
+)]
 pub async fn list_spaces(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
@@ -54,6 +119,19 @@ pub async fn list_spaces(
     Ok(Json(spaces))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/user/{user_id}",
+    tag = "spaces",
+    params(
+        ("user_id" = Uuid, Path, description = "User UUID"),
+        ("limit" = Option<i64>, Query, description = "Page limit"),
+        ("offset" = Option<i64>, Query, description = "Page offset"),
+    ),
+    responses(
+        (status = 200, description = "User's spaces", body = Vec<Space>),
+    ),
+)]
 pub async fn list_user_spaces(
     Path(user_id): Path<Uuid>,
     State(state): State<AppState>,
@@ -63,6 +141,19 @@ pub async fn list_user_spaces(
     Ok(Json(spaces))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/spaces/{space_id}",
+    tag = "spaces",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+    ),
+    request_body = UpdateSpace,
+    responses(
+        (status = 200, description = "Space updated", body = Space),
+        (status = 404, description = "Space not found"),
+    ),
+)]
 pub async fn update_space(
     State(state): State<AppState>,
     Path(space_id): Path<Uuid>,
@@ -72,14 +163,56 @@ pub async fn update_space(
     Ok(Json(space))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/spaces/{space_id}",
+    tag = "spaces",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+    ),
+    responses(
+        (status = 204, description = "Space deleted"),
+        (status = 404, description = "Space not found"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn delete_space(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path(space_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
+    let user_id = auth_user.user_id_uuid()?;
     state.space_service.delete_space(space_id).await?;
+    state
+        .audit_service
+        .log(
+            crate::services::audit_service::SPACE_DELETE,
+            user_id,
+            Some(space_id),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/spaces/{space_id}/members",
+    tag = "spaces",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+    ),
+    request_body = AddMember,
+    responses(
+        (status = 200, description = "Member added", body = SpaceMembership),
+    ),
+)]
 pub async fn add_member(
     State(state): State<AppState>,
     Path(space_id): Path<Uuid>,
@@ -89,6 +222,19 @@ pub async fn add_member(
     Ok(Json(membership))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/spaces/{space_id}/members/{user_id}",
+    tag = "spaces",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("user_id" = Uuid, Path, description = "User UUID"),
+    ),
+    responses(
+        (status = 204, description = "Member removed"),
+        (status = 404, description = "Member not found"),
+    ),
+)]
 pub async fn remove_member(
     State(state): State<AppState>,
     Path((space_id, user_id)): Path<(Uuid, Uuid)>,
@@ -97,6 +243,19 @@ pub async fn remove_member(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/{space_id}/members",
+    tag = "spaces",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("limit" = Option<i64>, Query, description = "Page limit"),
+        ("offset" = Option<i64>, Query, description = "Page offset"),
+    ),
+    responses(
+        (status = 200, description = "List of members", body = Vec<SpaceMembership>),
+    ),
+)]
 pub async fn list_members(
     State(state): State<AppState>,
     Path(space_id): Path<Uuid>,
@@ -106,6 +265,19 @@ pub async fn list_members(
     Ok(Json(members))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/spaces/{space_id}/members/{user_id}",
+    tag = "spaces",
+    params(
+        ("space_id" = Uuid, Path, description = "Space UUID"),
+        ("user_id" = Uuid, Path, description = "User UUID"),
+    ),
+    responses(
+        (status = 200, description = "Member found", body = SpaceMembership),
+        (status = 404, description = "Member not found"),
+    ),
+)]
 pub async fn get_member(
     State(state): State<AppState>,
     Path((space_id, user_id)): Path<(Uuid, Uuid)>,

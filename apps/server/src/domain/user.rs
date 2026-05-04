@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
@@ -13,7 +14,7 @@ pub struct User {
     pub updated_at: OffsetDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub enum UserStatus {
     Pending,
     Active,
@@ -45,7 +46,7 @@ impl std::str::FromStr for UserStatus {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct UserProfile {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -68,14 +69,25 @@ impl Default for UserProfile {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+pub struct ThemePreferences {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub mode: String,
+    pub accent: String,
+    pub density: String,
+    pub message_display: String,
+    pub settings: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct ClientInfo {
     pub client_type: String,
     pub platform: Option<String>,
     pub device_name: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct ClientDevice {
     pub id: Uuid,
     pub user_id: Uuid,

@@ -4,3 +4,7 @@ pub mod channels;
 pub mod invites;
 pub mod messages;
 pub mod files;
+pub mod media;
+pub mod admin;
+pub mod roles;
+pub mod profile;

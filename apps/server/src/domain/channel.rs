@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Channel {
     pub id: Uuid,
     pub space_id: Uuid,
@@ -19,7 +20,7 @@ pub struct Channel {
     pub updated_at: OffsetDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub enum ChannelKind {
     Text,
     Voice,
@@ -54,7 +55,7 @@ impl Default for ChannelKind {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub enum ChannelVisibility {
     Public,
     Private,
@@ -86,7 +87,7 @@ impl Default for ChannelVisibility {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct ChannelFeatureFlags {
     pub id: Uuid,
     pub channel_id: Uuid,
@@ -113,7 +114,7 @@ impl Default for ChannelFeatureFlags {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateChannel {
     pub name: String,
     pub parent_id: Option<Uuid>,
@@ -122,7 +123,7 @@ pub struct CreateChannel {
     pub topic: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateChannel {
     pub name: Option<String>,
     pub topic: Option<String>,
@@ -130,7 +131,7 @@ pub struct UpdateChannel {
     pub feature_flags: Option<ChannelFeatureFlagsUpdate>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ChannelFeatureFlagsUpdate {
     pub text_enabled: Option<bool>,
     pub file_upload_enabled: Option<bool>,

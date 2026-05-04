@@ -2,17 +2,20 @@ use uuid::Uuid;
 use crate::domain::space::{Space, CreateSpace, UpdateSpace};
 use crate::domain::membership::{SpaceMembership, AddMember};
 use crate::repositories::space_repository::SpaceRepository;
+use crate::repositories::role_repository::RoleRepository;
+use crate::permissions::PermissionKey;
 use crate::error::AppError;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SpaceService {
     repository: Arc<SpaceRepository>,
+    role_repo: Arc<RoleRepository>,
 }
 
 impl SpaceService {
-    pub fn new(repository: Arc<SpaceRepository>) -> Self {
-        Self { repository }
+    pub fn new(repository: Arc<SpaceRepository>, role_repo: Arc<RoleRepository>) -> Self {
+        Self { repository, role_repo }
     }
 
     pub async fn create_space(
@@ -39,7 +42,18 @@ impl SpaceService {
             visibility,
         ).await?;
 
-        self.repository.add_member(space.id, user_id, None).await?;
+        let membership = self.repository.add_member(space.id, user_id, None).await?;
+
+        let everyone = self.role_repo.create(space.id, "@everyone", true).await?;
+
+        let basic_perms = vec![
+            PermissionKey::ViewSpace.as_str().to_string(),
+            PermissionKey::ViewChannel.as_str().to_string(),
+            PermissionKey::ReadMessages.as_str().to_string(),
+        ];
+        self.role_repo.set_permissions(everyone.id, &basic_perms, true).await?;
+
+        self.role_repo.assign_role_to_member(membership.id, everyone.id).await?;
 
         Ok(space)
     }

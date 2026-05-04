@@ -1,8 +1,10 @@
 pub mod auth;
 pub mod config;
+pub mod docs;
 pub mod domain;
 pub mod error;
 pub mod handlers;
+pub mod middleware;
 pub mod permissions;
 pub mod realtime;
 pub mod repositories;

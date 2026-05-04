@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use uuid::Uuid;
+use utoipa::ToSchema;
 
 use crate::auth::jwt::JwtManager;
 use crate::auth::password::{hash_password, verify_password};
@@ -9,7 +10,7 @@ use crate::domain::user::{User, ClientInfo, ClientDevice};
 use crate::error::AppError;
 use crate::repositories::user_repository::UserRepository;
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct AuthResponse {
     pub user: User,
     pub access_token: String,

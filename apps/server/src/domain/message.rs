@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Message {
     pub id: Uuid,
     pub channel_id: Uuid,
@@ -15,14 +16,14 @@ pub struct Message {
     pub created_at: OffsetDateTime,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateMessage {
     pub content: String,
     pub kind: Option<String>,
     pub reply_to_message_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateMessage {
     pub content: Option<String>,
 }

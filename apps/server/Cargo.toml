@@ -41,3 +41,8 @@ thiserror       = "2"
 anyhow          = "1"
 time            = { version = "0.3", features = ["serde"] }
 url             = "2"
+
+livekit-api     = { version = "0.4.19", features = ["access-token"] }
+
+utoipa          = { version = "5", features = ["axum_extras", "uuid", "time"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }

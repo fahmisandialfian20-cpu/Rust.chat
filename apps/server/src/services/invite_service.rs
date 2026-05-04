@@ -2,17 +2,28 @@ use uuid::Uuid;
 use time::OffsetDateTime;
 use crate::domain::invite::{Invite, CreateInvite};
 use crate::repositories::invite_repository::InviteRepository;
+use crate::repositories::space_repository::SpaceRepository;
+use crate::repositories::channel_repository::ChannelRepository;
+use crate::repositories::role_repository::RoleRepository;
 use crate::error::AppError;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct InviteService {
     repository: Arc<InviteRepository>,
+    space_repo: Arc<SpaceRepository>,
+    channel_repo: Arc<ChannelRepository>,
+    role_repo: Arc<RoleRepository>,
 }
 
 impl InviteService {
-    pub fn new(repository: Arc<InviteRepository>) -> Self {
-        Self { repository }
+    pub fn new(
+        repository: Arc<InviteRepository>,
+        space_repo: Arc<SpaceRepository>,
+        channel_repo: Arc<ChannelRepository>,
+        role_repo: Arc<RoleRepository>,
+    ) -> Self {
+        Self { repository, space_repo, channel_repo, role_repo }
     }
 
     pub async fn create_invite(
@@ -57,6 +68,29 @@ impl InviteService {
         self.repository.increment_used_count(invite.id).await?;
 
         Ok(invite)
+    }
+
+    pub async fn accept_invite(&self, code: &str, user_id: Uuid) -> Result<String, AppError> {
+        let invite = self.validate_invite(code).await?;
+
+        if let Some(space_id) = invite.space_id {
+            let membership = self.space_repo.add_member(space_id, user_id, None).await?;
+
+            let roles = self.role_repo.find_by_space(space_id).await?;
+            if let Some(everyone) = roles.iter().find(|r| r.is_default) {
+                self.role_repo.assign_role_to_member(membership.id, everyone.id).await?;
+            }
+
+            self.repository.increment_used_count(invite.id).await?;
+            Ok(space_id.to_string())
+        } else if let Some(channel_id) = invite.channel_id {
+            self.channel_repo.add_member(channel_id, user_id).await?;
+
+            self.repository.increment_used_count(invite.id).await?;
+            Ok(channel_id.to_string())
+        } else {
+            Err(AppError::BadRequest("Invite has no target".to_string()))
+        }
     }
 
     pub async fn list_space_invites(&self, space_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Invite>, AppError> {

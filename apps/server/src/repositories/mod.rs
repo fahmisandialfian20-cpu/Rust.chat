@@ -4,3 +4,5 @@ pub mod channel_repository;
 pub mod invite_repository;
 pub mod message_repository;
 pub mod file_repository;
+pub mod audit_repository;
+pub mod role_repository;

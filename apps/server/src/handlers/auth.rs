@@ -1,5 +1,7 @@
+use std::net::SocketAddr;
+
 use axum::{
-    extract::{Path, State},
+    extract::{connect_info::ConnectInfo, Path, State},
     http::StatusCode,
     response::Json,
 };
@@ -9,23 +11,25 @@ use uuid::Uuid;
 use crate::auth::middleware::AuthUser;
 use crate::domain::user::{ClientInfo, User, ClientDevice};
 use crate::error::AppError;
+use crate::middleware::rate_limit;
 use crate::services::auth_service::AuthResponse;
 use crate::state::AppState;
+use utoipa::ToSchema;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct BootstrapRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RegisterRequest {
     pub username: String,
     pub password: String,
     pub invite_code: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub username_or_email: String,
     pub password: String,
@@ -33,16 +37,26 @@ pub struct LoginRequest {
     pub client: Option<ClientInfo>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LogoutRequest {
     pub refresh_token: Option<String>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/bootstrap-owner",
+    tag = "auth",
+    request_body = BootstrapRequest,
+    responses(
+        (status = 200, description = "Owner account created", body = AuthResponse),
+        (status = 409, description = "Instance already has an owner"),
+    ),
+)]
 pub async fn bootstrap_owner(
     State(state): State<AppState>,
     Json(payload): Json<BootstrapRequest>,
@@ -51,9 +65,32 @@ pub async fn bootstrap_owner(
         .auth_service
         .bootstrap_owner(payload.username, payload.password)
         .await?;
+    state
+        .audit_service
+        .log(
+            crate::services::audit_service::BOOTSTRAP,
+            response.user.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await?;
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    tag = "auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 200, description = "User registered", body = AuthResponse),
+        (status = 409, description = "Username already taken"),
+    ),
+)]
 pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
@@ -65,28 +102,86 @@ pub async fn register(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = AuthResponse),
+        (status = 401, description = "Invalid credentials"),
+        (status = 429, description = "Too many login attempts"),
+    ),
+)]
 pub async fn login(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
+    let ip = addr.ip().to_string();
+    let key = rate_limit::login_key(&ip);
+    state
+        .rate_limiter
+        .check(&key, state.config.rate_limit.login, 60)
+        .await?;
     let response = state
         .auth_service
         .login(payload.username_or_email, payload.password, payload.client)
         .await?;
+    state
+        .audit_service
+        .log(
+            crate::services::audit_service::LOGIN,
+            response.user.id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(ip),
+        )
+        .await?;
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    tag = "auth",
+    responses(
+        (status = 200, description = "Logged out successfully"),
+        (status = 401, description = "Unauthorized"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn logout(
     State(state): State<AppState>,
     auth_user: AuthUser,
 ) -> Result<StatusCode, AppError> {
+    let user_id = auth_user.user_id_uuid()?;
     state
         .auth_service
-        .logout(auth_user.user_id_uuid()?, auth_user.session_id_uuid()?)
+        .logout(user_id, auth_user.session_id_uuid()?)
+        .await?;
+    state
+        .audit_service
+        .log(crate::services::audit_service::LOGOUT, user_id, None, None, None, None, None, None)
         .await?;
     Ok(StatusCode::OK)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    tag = "auth",
+    request_body = RefreshRequest,
+    responses(
+        (status = 200, description = "Tokens refreshed", body = AuthResponse),
+        (status = 401, description = "Invalid or expired refresh token"),
+    ),
+)]
 pub async fn refresh(
     State(state): State<AppState>,
     Json(payload): Json<RefreshRequest>,
@@ -98,6 +193,18 @@ pub async fn refresh(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/me",
+    tag = "auth",
+    responses(
+        (status = 200, description = "Current user info", body = User),
+        (status = 401, description = "Unauthorized"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn me(
     State(state): State<AppState>,
     auth_user: AuthUser,
@@ -109,6 +216,18 @@ pub async fn me(
     Ok(Json(user))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/devices",
+    tag = "auth",
+    responses(
+        (status = 200, description = "List of registered devices", body = Vec<ClientDevice>),
+        (status = 401, description = "Unauthorized"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+)]
 pub async fn list_devices(
     State(state): State<AppState>,
     auth_user: AuthUser,
@@ -120,6 +239,21 @@ pub async fn list_devices(
     Ok(Json(devices))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/auth/devices/{device_id}",
+    tag = "auth",
+    params(
+        ("device_id" = Uuid, Path, description = "Device ID"),
+    ),
+    responses(
+        (status = 204, description = "Device revoked"),
+        (status = 401, description = "Unauthorized"),
+    ),
+    security(
+        ("bearer_auth" = [])
+),
+)]
 pub async fn revoke_device(
     State(state): State<AppState>,
     auth_user: AuthUser,

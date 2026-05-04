@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Invite {
     pub id: Uuid,
     pub code: String,
@@ -15,7 +16,7 @@ pub struct Invite {
     pub created_at: OffsetDateTime,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateInvite {
     pub space_id: Option<Uuid>,
     pub channel_id: Option<Uuid>,
