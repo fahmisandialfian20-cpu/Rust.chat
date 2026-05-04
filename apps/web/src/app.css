@@ -42,6 +42,62 @@
     var(--color-rc-950);
 }
 
+:root[data-accent="blue"] {
+  --color-brand-50: oklch(0.962 0.018 250);
+  --color-brand-100: oklch(0.93 0.034 250);
+  --color-brand-200: oklch(0.87 0.065 250);
+  --color-brand-300: oklch(0.785 0.115 250);
+  --color-brand-400: oklch(0.673 0.182 250);
+  --color-brand-500: oklch(0.585 0.233 250);
+  --color-brand-600: oklch(0.511 0.262 250);
+  --color-brand-700: oklch(0.457 0.24 250);
+  --color-brand-800: oklch(0.398 0.195 250);
+  --color-brand-900: oklch(0.359 0.144 250);
+  --color-brand-950: oklch(0.257 0.09 250);
+}
+
+:root[data-accent="green"] {
+  --color-brand-50: oklch(0.962 0.018 150);
+  --color-brand-100: oklch(0.93 0.034 150);
+  --color-brand-200: oklch(0.87 0.065 150);
+  --color-brand-300: oklch(0.785 0.115 150);
+  --color-brand-400: oklch(0.673 0.182 150);
+  --color-brand-500: oklch(0.585 0.233 150);
+  --color-brand-600: oklch(0.511 0.262 150);
+  --color-brand-700: oklch(0.457 0.24 150);
+  --color-brand-800: oklch(0.398 0.195 150);
+  --color-brand-900: oklch(0.359 0.144 150);
+  --color-brand-950: oklch(0.257 0.09 150);
+}
+
+:root[data-accent="orange"] {
+  --color-brand-50: oklch(0.962 0.018 50);
+  --color-brand-100: oklch(0.93 0.034 50);
+  --color-brand-200: oklch(0.87 0.065 50);
+  --color-brand-300: oklch(0.785 0.115 50);
+  --color-brand-400: oklch(0.673 0.182 50);
+  --color-brand-500: oklch(0.585 0.233 50);
+  --color-brand-600: oklch(0.511 0.262 50);
+  --color-brand-700: oklch(0.457 0.24 50);
+  --color-brand-800: oklch(0.398 0.195 50);
+  --color-brand-900: oklch(0.359 0.144 50);
+  --color-brand-950: oklch(0.257 0.09 50);
+}
+
+:root[data-accent="pink"] {
+  --color-brand-50: oklch(0.962 0.018 340);
+  --color-brand-100: oklch(0.93 0.034 340);
+  --color-brand-200: oklch(0.87 0.065 340);
+  --color-brand-300: oklch(0.785 0.115 340);
+  --color-brand-400: oklch(0.673 0.182 340);
+  --color-brand-500: oklch(0.585 0.233 340);
+  --color-brand-600: oklch(0.511 0.262 340);
+  --color-brand-700: oklch(0.457 0.24 340);
+  --color-brand-800: oklch(0.398 0.195 340);
+  --color-brand-900: oklch(0.359 0.144 340);
+  --color-brand-950: oklch(0.257 0.09 340);
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;

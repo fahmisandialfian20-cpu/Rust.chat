@@ -5,9 +5,13 @@
   import { Hash, LoaderCircle, AlertCircle } from 'lucide-svelte';
   import { getChannel, getChannelFlags } from '$lib/api/channels';
   import { listMessages, sendMessage } from '$lib/api/messages';
-  import { getAccessToken } from '$lib/stores/auth.svelte';
+  import { getAccessToken, getUser } from '$lib/stores/auth.svelte';
+  import { realtime } from '$lib/stores/realtime';
+  import { setTyping, clearChannel } from '$lib/stores/typing.svelte';
+  import { subscribeToRealtime, clearAll as clearPresence } from '$lib/stores/presence.svelte';
   import MessageList from '$lib/components/chat/MessageList.svelte';
   import MessageComposer from '$lib/components/chat/MessageComposer.svelte';
+  import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte';
   import type { Message } from '$lib/schemas/messages';
 
   type ViewState = 'loading' | 'loaded' | 'error' | 'forbidden' | 'notfound';
@@ -24,6 +28,8 @@
 
   let spaceId = $derived(page.params.spaceId as string);
   let channelId = $derived(page.params.channelId as string);
+
+  let currentUserId = $derived((getUser() as { id: string } | null)?.id ?? '');
 
   let composerDisabled = $derived.by(() => {
     if (viewState !== 'loaded') return true;
@@ -47,6 +53,28 @@
       return;
     }
     load();
+    realtime.connect(token);
+    const unsubPresence = subscribeToRealtime(realtime);
+    return () => {
+      realtime.disconnect();
+      clearChannel(channelId);
+      unsubPresence();
+      clearPresence();
+    };
+  });
+
+  $effect(() => {
+    const cid = channelId;
+    const unsub = realtime.subscribe('typing.update', (payload) => {
+      const p = payload as { channel_id: string; user_id: string; is_typing: boolean };
+      if (p.channel_id === cid) {
+        setTyping(p.channel_id, p.user_id, p.is_typing);
+      }
+    });
+    return () => {
+      clearChannel(cid);
+      unsub();
+    };
   });
 
   async function load() {
@@ -100,6 +128,13 @@
     } finally {
       loadingMore = false;
     }
+  }
+
+  function handleTypingChange(isTyping: boolean) {
+    realtime.send({
+      type: 'typing.update',
+      payload: { channel_id: channelId, is_typing: isTyping },
+    });
   }
 
   async function handleSend(content: string) {
@@ -172,11 +207,13 @@
       {loadingMore}
       onloadMore={loadMore}
     />
+    <TypingIndicator {channelId} currentUserId={currentUserId} />
     <MessageComposer
       disabled={composerDisabled}
       disabledReason={composerDisabledReason}
       {sending}
       onsend={handleSend}
+      onTypingChange={handleTypingChange}
     />
   {/if}
 </div>

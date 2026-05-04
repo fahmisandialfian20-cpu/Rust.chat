@@ -3,6 +3,8 @@
   import { goto } from '$app/navigation';
   import { LogOut, Shield, Menu, X } from 'lucide-svelte';
   import { getAccessToken, getUser, clearAuth } from '$lib/stores/auth.svelte';
+  import { realtime } from '$lib/stores/realtime.svelte';
+  import ReconnectBanner from '$lib/components/realtime/ReconnectBanner.svelte';
 
   let { children } = $props();
   let sidebarOpen = $state(false);
@@ -11,10 +13,13 @@
     const token = getAccessToken();
     if (!token) {
       goto('/login');
+      return;
     }
+    realtime.connect(token);
   });
 
   function handleLogout() {
+    realtime.disconnect();
     clearAuth();
     goto('/login');
   }
@@ -59,6 +64,18 @@
       >
         Spaces
       </a>
+      <a
+        href="/admin/roles"
+        class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-rc-200 transition hover:bg-white/5 hover:text-white"
+      >
+        Admin
+      </a>
+      <a
+        href="/settings/theme"
+        class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-rc-200 transition hover:bg-white/5 hover:text-white"
+      >
+        Settings
+      </a>
     </nav>
 
     <div class="border-t border-white/10 px-4 py-4">
@@ -88,7 +105,8 @@
     ></div>
   {/if}
 
-  <main class="flex flex-1 flex-col overflow-y-auto">
+  <main class="relative flex flex-1 flex-col overflow-y-auto">
+    <ReconnectBanner />
     <div class="flex-1">
       {@render children()}
     </div>

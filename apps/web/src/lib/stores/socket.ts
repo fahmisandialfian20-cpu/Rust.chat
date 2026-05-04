@@ -1,15 +1,6 @@
 import { writable } from 'svelte/store';
-import { z } from 'zod';
-
-export const websocketEnvelopeSchema = z.object({
-  version: z.literal(1),
-  type: z.string().min(1),
-  request_id: z.string().min(1).optional(),
-  payload: z.unknown().default({}),
-  sent_at: z.string().datetime().optional()
-});
-
-export type WebsocketEnvelope = z.infer<typeof websocketEnvelopeSchema>;
+import { websocketEnvelopeSchema, parseWsEvent } from '$lib/schemas/websocket';
+import type { WebsocketEnvelope } from '$lib/schemas/websocket';
 
 export type SocketConnectionState = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed' | 'error';
 
@@ -35,18 +26,18 @@ function createSocketStore() {
       update((state) => ({ ...state, connection, error: null }));
     },
     acceptRawEvent: (value: unknown) => {
-      const parsed = websocketEnvelopeSchema.safeParse(value);
+      const result = parseWsEvent(value);
 
-      if (!parsed.success) {
+      if (!result.success) {
         update((state) => ({
           ...state,
           connection: 'error',
-          error: 'Received an invalid WebSocket event envelope.'
+          error: result.error
         }));
         return false;
       }
 
-      update((state) => ({ ...state, lastEvent: parsed.data, error: null }));
+      update((state) => ({ ...state, lastEvent: result.data, error: null }));
       return true;
     },
     setError: (error: string) => {

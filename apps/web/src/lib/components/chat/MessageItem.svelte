@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { Message } from '$lib/schemas/messages';
+  import { getPresence } from '$lib/stores/presence.svelte';
+  import PresenceDot from '$lib/components/presence/PresenceDot.svelte';
 
   let { message }: { message: Message } = $props();
+
+  let presenceStatus = $derived(getPresence(message.author_user_id));
 
   function formatTime(iso: string): string {
     const date = new Date(iso);
@@ -28,7 +32,10 @@
   </div>
   <div class="min-w-0 flex-1">
     <div class="flex items-baseline gap-2">
-      <span class="text-sm font-medium text-rc-200">{authorLabel}</span>
+      <span class="flex items-center gap-1.5">
+        <PresenceDot status={presenceStatus} size="sm" />
+        <span class="text-sm font-medium text-rc-200">{authorLabel}</span>
+      </span>
       <time class="text-xs text-rc-500" datetime={message.created_at}>{timestamp}</time>
     </div>
     <p class="mt-0.5 whitespace-pre-wrap break-words text-sm text-rc-100">{message.content}</p>

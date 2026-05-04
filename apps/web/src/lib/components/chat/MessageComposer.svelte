@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { Send } from 'lucide-svelte';
 
   let {
@@ -6,22 +7,59 @@
     disabledReason = '',
     sending = false,
     onsend,
+    onTypingChange,
   }: {
     disabled?: boolean;
     disabledReason?: string;
     sending?: boolean;
     onsend?: (content: string) => void;
+    onTypingChange?: (isTyping: boolean) => void;
   } = $props();
 
   let text = $state('');
+  let isTyping = $state(false);
+  let lastTypingEmit = 0;
+  let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const TYPING_THROTTLE_MS = 2000;
+  const INACTIVITY_MS = 2000;
 
   let trimmed = $derived(text.trim());
   let canSend = $derived(!disabled && !sending && trimmed.length > 0);
 
+  function emitTyping(typing: boolean) {
+    if (typing) {
+      const now = Date.now();
+      if (now - lastTypingEmit < TYPING_THROTTLE_MS) return;
+      lastTypingEmit = now;
+    }
+    isTyping = typing;
+    onTypingChange?.(typing);
+  }
+
+  function resetInactivityTimer() {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      if (isTyping) emitTyping(false);
+    }, INACTIVITY_MS);
+  }
+
+  $effect(() => {
+    if (text.length > 0) {
+      if (!isTyping) emitTyping(true);
+      resetInactivityTimer();
+    } else if (isTyping) {
+      emitTyping(false);
+    }
+  });
+
   function handleSubmit() {
     if (!canSend) return;
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    if (isTyping) emitTyping(false);
     const content = trimmed;
     text = '';
+    lastTypingEmit = 0;
     onsend?.(content);
   }
 
@@ -31,6 +69,11 @@
       handleSubmit();
     }
   }
+
+  onDestroy(() => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    if (isTyping) onTypingChange?.(false);
+  });
 </script>
 
 <div class="border-t border-white/10 bg-rc-950 px-4 py-3">
