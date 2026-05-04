@@ -16,15 +16,27 @@ Self-hosted chat (Discord-like). Hoster = highest authority per deployment.
 
 ## Quick start
 
+### Native workflow (recommended for daily development)
+
 ```bash
-# 1. Infra
-docker compose -f infra/docker-compose.dev.yml up -d
+# 1. Infra (PostgreSQL + Redis only)
+docker compose -f infra/docker-compose.dev.yml up -d postgres redis
 
 # 2. Backend
 cd apps/server && cargo run
 
 # 3. Frontend
-cd apps/web && pnpm dev
+cd apps/web && npm run dev
+```
+
+### Full Docker workflow (integration testing)
+
+```bash
+# 1. Copy environment file
+cp .env.example .env
+
+# 2. Start all services
+docker compose -f infra/docker-compose.dev.yml up -d --build
 ```
 
 ## Non-negotiable rules (3-second scan)
@@ -41,7 +53,8 @@ cd apps/web && pnpm dev
 
 | Need | Go to |
 |------|-------|
-| Tasks, acceptance criteria, validated `Cargo.toml` | `TODO.md` |
+| Active task tracker (local/private, not tracked) | `TODO.md` |
+| Tasks, acceptance criteria, infrastructure plan | `context-v2/` |
 | Product requirements, actors, MVP scope | `context/01-product-requirements.md` |
 | Database schema (all tables) | `context/04-domain-model-database.md` |
 | RBAC model, PermissionKey enum, 5-layer check | `context/05-permissions-rbac.md` |

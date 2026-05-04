@@ -5,6 +5,10 @@
 # Path conventions (relative paths in this file resolve from infra/):
 #   ../<path>   → project root (e.g. ../apps/server, ../.env)
 #   ./          → this directory (infra/)
+#
+# Prerequisites for full stack (server + web):
+#   cp .env.example .env
+#   # edit .env and replace placeholder secrets
 # =============================================================================
 
 services:

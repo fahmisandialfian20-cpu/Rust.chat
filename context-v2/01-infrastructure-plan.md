@@ -11,7 +11,7 @@ The current development environment must support the MVP core:
 - Web frontend (`apps/web`) built with SvelteKit 2, Svelte 5 (Runes), Tailwind CSS v4.
 - Optional LiveKit placeholder in configuration, but disabled by default (`LIVEKIT_ENABLED=false`).
 
-The developer workflow described in `AGENTS.md` runs infrastructure services (PostgreSQL, Redis) via Docker Compose, while the backend and frontend are run natively (`cargo run`, `pnpm dev`). The existing `infra/docker-compose.dev.yml` also defines `server` and `web` services, which creates ambiguity about whether the intended dev workflow is fully native or fully containerized.
+The developer workflow described in `AGENTS.md` runs infrastructure services (PostgreSQL, Redis) via Docker Compose, while the backend and frontend are run natively (`cargo run`, `npm run dev`). The existing `infra/docker-compose.dev.yml` also defines `server` and `web` services, which creates ambiguity about whether the intended dev workflow is fully native or fully containerized.
 
 The existing backend already exposes `/healthz` (liveness) and `/readyz` (DB + Redis connectivity). These should be reused for infrastructure health checks.
 
@@ -134,7 +134,7 @@ LOG_FORMAT=pretty
 ```
 
 ### Development vs Docker-internal URLs
-- When running **natively** (`cargo run`, `pnpm dev`), use `localhost` in `DATABASE_URL` and `REDIS_URL`.
+- When running **natively** (`cargo run`, `npm run dev`), use `localhost` in `DATABASE_URL` and `REDIS_URL`.
 - When running **inside Docker Compose**, override via compose `environment` or an `env_file` to use service hostnames (`postgres`, `redis`).
 - The root `.env.example` should default to `localhost` because the primary dev workflow is native. Docker Compose can inject overrides.
 
@@ -175,20 +175,29 @@ docker compose -f infra/docker-compose.dev.yml up -d postgres redis
 cd apps/server && cargo run
 
 # 3. Run frontend natively
-cd apps/web && pnpm dev
+cd apps/web && npm run dev
 ```
 
 ### Optional fully-containerized workflow (for integration checks)
 
 ```bash
-# Start everything including server and web
-docker compose -f infra/docker-compose.dev.yml up -d
+# 1. Create local environment file
+cp .env.example .env
+# edit .env and replace placeholder secrets
+
+# 2. Start everything including server and web
+docker compose -f infra/docker-compose.dev.yml up -d --build
 ```
 
 ### Rationale
 - Native builds are faster for Rust and Node.js during active development (incremental compilation, HMR).
 - Docker Compose is the source of truth for PostgreSQL and Redis versions/configuration.
 - The compose file must remain usable for both modes: infrastructure-only and full-stack.
+
+### Package manager
+- **npm** is the chosen package manager for the web frontend.
+- `package-lock.json` must be committed to ensure reproducible installs.
+- Do not mix npm with pnpm or yarn in the same project.
 
 ## 11. Security Notes for Development vs Production
 
@@ -307,9 +316,9 @@ cargo test
 ### Frontend checks (run natively)
 ```bash
 cd apps/web
-pnpm install
-pnpm check
-pnpm build
+npm install
+npm run check
+npm run build
 ```
 
 ### Health endpoint checks (after backend is running)
@@ -332,7 +341,7 @@ Planned for post-MVP phases:
 - **Production deployment patterns:** Kubernetes manifests, Terraform modules, reverse proxy (Traefik/Nginx) automation.
 - **Cloud storage integration:** S3-compatible (R2, MinIO), GCS, Azure Blob. The `object_store` crate is already a dependency; only configuration is needed.
 - **LiveKit production:** TURN/STUN, TLS termination, automated provisioning.
-- **CI/CD:** GitHub Actions for `cargo test`, `cargo clippy`, `pnpm check`, `pnpm build`, Docker image builds.
+- **CI/CD:** GitHub Actions for `cargo test`, `cargo clippy`, `npm run check`, `npm run build`, Docker image builds.
 - **Observability:** Structured logging (`LOG_FORMAT=json`), Prometheus metrics, Grafana dashboards, Sentry error tracking.
 - **Security hardening:** Network policies, secret management (Vault/Sealed Secrets), automated CVE scanning.
 - **Backup/restore:** PostgreSQL `pg_dump`/`pg_restore` automation, upload volume snapshots.
