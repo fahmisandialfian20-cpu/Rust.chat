@@ -1,105 +1,146 @@
-# AGENTS.md — Rust.chat
+# AGENTS.md — Rust.chat Agent Router
 
-Self-hosted chat (Discord-like). Hoster = highest authority per deployment.
+Rust.chat is a self-hosted chat application inspired by Discord and Telegram.
 
-## Stack (cheat-sheet)
+The deployer is the **Hoster** and is the highest authority in the instance.
 
-| Layer | Tech |
-|-------|------|
-| Backend | Rust, Axum 0.8, Tokio, SQLx 0.8 |
-| DB | PostgreSQL 16 |
-| Cache / Real-time | Redis 7 (pub/sub, presence, rate limit) |
-| Web UI | SvelteKit 2 + Svelte 5 (Runes), Tailwind CSS v4, shadcn-svelte |
-| Desktop | Tauri (wraps web UI) |
-| Mobile | Flutter |
-| Media | LiveKit (optional, Phase 10+) |
+This file is only a router. Do not turn this file into a long project encyclopedia.
 
-## Quick start
+---
 
-### Native workflow (recommended for daily development)
+## Mandatory Reading Order
+
+For every task, read only:
+
+1. `context/00-project-overview.md`
+2. `context/01-product-scope.md`
+3. The one task-specific context file requested by the user or issue
+
+If no task-specific file is provided, ask for one or create a plan/spec first.
+
+Do **not** load the entire `context/` folder.
+
+Do **not** read archived, deprecated, or old reference files unless the task explicitly asks for them.
+
+---
+
+## Canonical Context Files
+
+The active core context is exactly these 7 files:
+
+```text
+context/00-project-overview.md
+context/01-product-scope.md
+context/02-architecture-stack.md
+context/03-domain-permissions.md
+context/04-client-ui-experience.md
+context/05-storage-infrastructure.md
+context/06-agent-workflow.md
+```
+
+Anything outside these files is reference-only unless the active task says otherwise.
+
+---
+
+## Current Development Direction
+
+Current active direction:
+
+```text
+MVP Core Stabilization
+```
+
+Work should be split into small task contexts, for example:
+
+```text
+auth
+rbac
+channel-visibility
+message-permissions
+websocket-mvp
+infrastructure
+frontend-shell
+```
+
+Do not implement the entire application in one pass.
+
+Do not jump to future phases.
+
+---
+
+## Non-Negotiable Rules
+
+1. Backend is the source of truth.
+2. Frontend permission state is UI convenience only, not security.
+3. Protected backend actions must validate authenticated user context.
+4. Protected backend actions must use `PermissionService` or equivalent service-level permission checks.
+5. Handlers must stay thin; business logic belongs in services.
+6. Real handlers must never use `Uuid::nil()` as the acting user.
+7. Private channels must not be visible to unauthorized users.
+8. Message read/send/edit/delete must be permission checked.
+9. WebSocket events must follow the same permission rules as REST.
+10. Do not add LiveKit, mobile, desktop, advanced storage, or UI polish unless the task explicitly asks for it.
+
+---
+
+## Quick Start
+
+### Native workflow, recommended for daily development
 
 ```bash
-# 1. Infra (PostgreSQL + Redis only)
+# 1. Start infrastructure only
 docker compose -f infra/docker-compose.dev.yml up -d postgres redis
 
-# 2. Backend
+# 2. Run backend
 cd apps/server && cargo run
 
-# 3. Frontend
+# 3. Run frontend
 cd apps/web && npm run dev
 ```
 
-### Full Docker workflow (integration testing)
+### Full Docker workflow, integration check
 
 ```bash
-# 1. Copy environment file
 cp .env.example .env
-
-# 2. Start all services
 docker compose -f infra/docker-compose.dev.yml up -d --build
 ```
 
-## Non-negotiable rules (3-second scan)
+---
 
-1. **Backend validates everything** — never trust frontend permission state.
-2. **Handlers are thin** — parse input only; logic lives in services.
-3. **PermissionService is the gate** — no endpoint bypasses it.
-4. **UUID v7 for DB PKs**, v4 only for tokens.
-5. **No raw secrets in responses** — JWT secret, LiveKit key, pepper stay server-side.
-6. **No raw invite tokens stored** — store HMAC/hash only.
-7. **Use `FileStorage` trait** — don't hardcode a single provider.
+## Verification Commands
 
-## Where details live
+Backend changes:
 
-| Need | Go to |
-|------|-------|
-| Active task tracker (local/private, not tracked) | `TODO.md` |
-| Tasks, acceptance criteria, infrastructure plan | `context-v2/` |
-| Product requirements, actors, MVP scope | `context/01-product-requirements.md` |
-| Database schema (all tables) | `context/04-domain-model-database.md` |
-| RBAC model, PermissionKey enum, 5-layer check | `context/05-permissions-rbac.md` |
-| REST + WebSocket API contracts | `context/06-api-websocket-contract.md` |
-| SvelteKit / Tauri / Flutter guides | `context/10-*`, `context/11-*` |
-| Security rules, rate limits, audit logs | `context/13-security-observability.md` |
-| Env vars, Docker, health checks | `context-v2/01-infrastructure-plan.md` |
-| Full context index | `context/manifest.json` |
+```bash
+cd apps/server
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
+```
 
-## Critical gotchas (will break build)
+Frontend changes:
 
-- Axum 0.8 WS route → `routing::any()`, not `get()`.
-- `jsonwebtoken` 10 → needs feature `rust_crypto` or `aws_lc_rs`.
-- `argon2` → crate `argon2` (RustCrypto), NOT `rust-argon2`.
-- `sqlx` 0.8 → features `runtime-tokio` + `tls-rustls` separately.
-- Tailwind v4 → no `tailwind.config.js`; config in `@theme {}` inside CSS.
-- Svelte 5 → use `$app/state`, not `$app/stores`.
+```bash
+cd apps/web
+npm install
+npm run check
+npm run build
+```
 
-## MCP Servers
+Infrastructure changes:
 
-| Name | Status |
-|------|--------|
-| github | connected |
-| context7 | connected |
+```bash
+docker compose -f infra/docker-compose.dev.yml config
+```
 
-## Skills
+If a command cannot run, report why.
 
-### Process
-- `brainstorming`, `writing-plans`, `executing-plans`
-- `systematic-debugging`, `verification-before-completion`
-- `test-driven-development`
+---
 
-### Domain
-- `apollographql/rust-best-practices`
-- `supabase/postgres-best-practices`, `neondatabase/neon-postgres`
-- `redis/redis-development`
-- `vercel-labs/composition-patterns`, `anthropics/frontend-design`
-- `google-labs-code/shadcn-ui`, `getsentry/sentry-svelte-sdk`
-- `flutter/flutter-architecting-apps`
-- `trailofbits/static-analysis`, `trailofbits/property-based-testing`
-- `getsentry/sentry-workflow`, `getsentry/sentry-node-sdk`
-- `google-labs-code/design-md`
+## Local Files
 
-## Notes
+`TODO.md` may exist in the local workspace, but it is private and not tracked.
 
-- OpenCode tools are sufficient for file ops.
-- Use skills for structured workflows.
-- Deprecated context files (`_deprecated_*`) are ignored.
+Use `TODO.md` only when the user explicitly says the local agent should use it.
+
+Tracked source of truth is the canonical context listed above.
