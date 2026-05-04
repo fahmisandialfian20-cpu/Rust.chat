@@ -12,6 +12,10 @@ apps/web/package-lock.json
 Cargo.lock
 .env
 
+# Documentation & plans (optional for VPS)
+context/
+docs/
+
 # IDE & OS
 .opencode.jsonc
 *.pdb
