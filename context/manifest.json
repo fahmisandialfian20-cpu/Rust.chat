@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-05-04",
+  "language": "English",
+  "major_change": "Converted from web-app context to multi-client web/desktop/mobile context.",
+  "active_files": [
+    "01-product-requirements.md",
+    "02-multiclient-architecture.md",
+    "03-technology-research.md",
+    "04-domain-model-database.md",
+    "05-permissions-rbac.md",
+    "06-api-websocket-contract.md",
+    "07-module-responsibilities.md",
+    "08-storage-and-media.md",
+    "09-client-strategy.md",
+    "10-frontend-web-desktop-guide.md",
+    "11-mobile-flutter-guide.md",
+    "12-operations-runbook.md",
+    "13-security-observability.md",
+    "14-agent-execution-plan.md",
+    "15-source-map.md",
+    "README.md",
+    "templates/.env.example",
+    "templates/docker-compose.dev.yml",
+    "templates/recommended-repo-layout.md"
+  ],
+  "deprecated_files": [
+    "_deprecated_02-architecture.md",
+    "_deprecated_09-frontend-guide.md",
+    "_deprecated_10-operations-runbook.md",
+    "_deprecated_11-security-observability.md",
+    "_deprecated_12-agent-execution-plan.md",
+    "_deprecated_13-source-map.md"
+  ],
+  "note": "Files prefixed with _deprecated_ are from the old web-only context pack. They must be ignored completely. Always read only the active_files list in the order defined in AGENTS.md."
+}

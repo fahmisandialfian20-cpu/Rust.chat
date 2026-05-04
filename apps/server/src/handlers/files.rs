@@ -1,0 +1,113 @@
+use axum::{
+    extract::{Path, State, Multipart},
+    http::{header, StatusCode},
+    response::Json,
+};
+use serde::Serialize;
+use uuid::Uuid;
+
+use crate::domain::file_object::FileObject;
+use crate::error::AppError;
+use crate::state::AppState;
+
+#[derive(Serialize)]
+pub struct UploadResponse {
+    pub file: FileObject,
+    pub download_url: String,
+}
+
+fn extract_user_id(state: &AppState, headers: &axum::http::HeaderMap) -> Result<Uuid, AppError> {
+    let auth_header = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .ok_or_else(|| AppError::Unauthorized("Missing authorization header".to_string()))?;
+
+    let claims = state.jwt_manager.verify_token(auth_header)?;
+    Uuid::parse_str(&claims.claims.sub).map_err(|_| AppError::Unauthorized("Invalid user".to_string()))
+}
+
+pub async fn upload_file(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    mut multipart: Multipart,
+) -> Result<Json<UploadResponse>, AppError> {
+    let user_id = extract_user_id(&state, &headers)?;
+
+    let mut filename = String::new();
+    let mut content_type = String::new();
+    let mut data = Vec::new();
+    let mut space_id: Option<Uuid> = None;
+    let mut channel_id: Option<Uuid> = None;
+
+    while let Some(mut field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
+        let name = field.name().unwrap_or("").to_string();
+        match name.as_str() {
+            "file" => {
+                filename = field.file_name().unwrap_or("unknown").to_string();
+                content_type = field.content_type().unwrap_or("application/octet-stream").to_string();
+                data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?.to_vec();
+            }
+            "space_id" => {
+                let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+                if !val.is_empty() {
+                    space_id = Some(Uuid::parse_str(&val).map_err(|_| AppError::BadRequest("Invalid space_id".to_string()))?);
+                }
+            }
+            "channel_id" => {
+                let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+                if !val.is_empty() {
+                    channel_id = Some(Uuid::parse_str(&val).map_err(|_| AppError::BadRequest("Invalid channel_id".to_string()))?);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if data.is_empty() {
+        return Err(AppError::BadRequest("No file data provided".to_string()));
+    }
+
+    let file = state.file_service.upload(
+        space_id,
+        channel_id,
+        user_id,
+        filename,
+        content_type,
+        data,
+    ).await?;
+
+    let download_url = state.file_service.get_download_url(file.id, user_id).await?;
+
+    Ok(Json(UploadResponse { file, download_url }))
+}
+
+pub async fn get_file(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(file_id): Path<Uuid>,
+) -> Result<Json<FileObject>, AppError> {
+    let user_id = extract_user_id(&state, &headers)?;
+    let file = state.file_service.get_file(file_id).await?;
+    state.file_service.get_download_url(file_id, user_id).await?;
+    Ok(Json(file))
+}
+
+pub async fn delete_file(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(file_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    let user_id = extract_user_id(&state, &headers)?;
+    state.file_service.delete_file(file_id, user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub fn router() -> axum::Router<AppState> {
+    use axum::routing::{get, post, delete};
+
+    axum::Router::new()
+        .route("/files/upload", post(upload_file))
+        .route("/files/{file_id}", get(get_file))
+        .route("/files/{file_id}", delete(delete_file))
+}
