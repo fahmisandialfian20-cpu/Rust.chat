@@ -16,6 +16,13 @@ async fn readyz(axum::extract::State(state): axum::extract::State<AppState>) -> 
     sqlx::query("SELECT 1")
         .execute(&state.db)
         .await
-        .map_err(|_| AppError::InternalServerError("DB not ready".to_string()))?;
+        .map_err(|_| AppError::ServiceUnavailable("Database not ready".to_string()))?;
+
+    let mut redis_conn = state.redis.clone();
+    let _: String = redis::cmd("PING")
+        .query_async(&mut redis_conn)
+        .await
+        .map_err(|_| AppError::ServiceUnavailable("Redis not ready".to_string()))?;
+
     Ok("OK")
 }
