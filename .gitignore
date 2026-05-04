@@ -11,6 +11,8 @@ apps/web/package-lock.json
 # Build outputs
 Cargo.lock
 .env
+apps/web/.svelte-kit/
+apps/web/build/
 
 # Task list & IDE
 TODO.md
