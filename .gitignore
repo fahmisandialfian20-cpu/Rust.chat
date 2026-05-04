@@ -1,8 +1,18 @@
 ﻿.worktrees/
 
-# Dependencies
+# Dependencies & builds
 node_modules/
 target/
+apps/server/target/
 
 # Package lock (regenerate with npm install)
 apps/web/package-lock.json
+
+# Build outputs
+Cargo.lock
+.env
+
+# IDE & OS
+.opencode.jsonc
+*.pdb
+*.exe
