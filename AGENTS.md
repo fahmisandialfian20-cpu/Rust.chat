@@ -137,10 +137,3 @@ If a command cannot run, report why.
 
 ---
 
-## Local Files
-
-`TODO.md` may exist in the local workspace, but it is private and not tracked.
-
-Use `TODO.md` only when the user explicitly says the local agent should use it.
-
-Tracked source of truth is the canonical context listed above.

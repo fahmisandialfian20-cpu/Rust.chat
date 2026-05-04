@@ -1,7 +1,6 @@
+use crate::error::AppError;
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::error::AppError;
-use super::keys::PermissionKey;
 
 #[derive(Clone)]
 pub struct PermissionRepository {
@@ -15,7 +14,7 @@ impl PermissionRepository {
 
     pub async fn get_host_user_id(&self) -> Result<Option<Uuid>, AppError> {
         let result = sqlx::query_scalar::<_, Option<Uuid>>(
-            "SELECT owner_user_id FROM instance_settings WHERE id = 1"
+            "SELECT owner_user_id FROM instance_settings WHERE id = 1",
         )
         .fetch_optional(&self.pool)
         .await
@@ -26,7 +25,7 @@ impl PermissionRepository {
 
     pub async fn is_space_member(&self, space_id: Uuid, user_id: Uuid) -> Result<bool, AppError> {
         let result = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM space_memberships WHERE space_id = $1 AND user_id = $2)"
+            "SELECT EXISTS(SELECT 1 FROM space_memberships WHERE space_id = $1 AND user_id = $2)",
         )
         .bind(space_id)
         .bind(user_id)
@@ -37,13 +36,17 @@ impl PermissionRepository {
         Ok(result)
     }
 
-    pub async fn get_role_ids_for_user(&self, space_id: Uuid, user_id: Uuid) -> Result<Vec<Uuid>, AppError> {
+    pub async fn get_role_ids_for_user(
+        &self,
+        space_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Vec<Uuid>, AppError> {
         let rows = sqlx::query_scalar::<_, Uuid>(
             r#"
             SELECT mr.role_id FROM member_roles mr
             JOIN space_memberships sm ON mr.membership_id = sm.id
             WHERE sm.space_id = $1 AND sm.user_id = $2
-            "#
+            "#,
         )
         .bind(space_id)
         .bind(user_id)
@@ -54,7 +57,10 @@ impl PermissionRepository {
         Ok(rows)
     }
 
-    pub async fn get_role_permissions(&self, role_ids: &[Uuid]) -> Result<Vec<RolePermission>, AppError> {
+    pub async fn get_role_permissions(
+        &self,
+        role_ids: &[Uuid],
+    ) -> Result<Vec<RolePermission>, AppError> {
         if role_ids.is_empty() {
             return Ok(vec![]);
         }
@@ -64,7 +70,7 @@ impl PermissionRepository {
             SELECT role_id, permission_key, allowed
             FROM role_permissions
             WHERE role_id = ANY($1)
-            "#
+            "#,
         )
         .bind(role_ids)
         .fetch_all(&self.pool)
@@ -74,7 +80,11 @@ impl PermissionRepository {
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 
-    pub async fn get_channel_overrides(&self, channel_id: Uuid, role_ids: &[Uuid]) -> Result<Vec<ChannelOverride>, AppError> {
+    pub async fn get_channel_overrides(
+        &self,
+        channel_id: Uuid,
+        role_ids: &[Uuid],
+    ) -> Result<Vec<ChannelOverride>, AppError> {
         if role_ids.is_empty() {
             return Ok(vec![]);
         }
@@ -84,7 +94,7 @@ impl PermissionRepository {
             SELECT channel_id, role_id, permission_key, denied
             FROM channel_permission_overrides
             WHERE channel_id = $1 AND role_id = ANY($2)
-            "#
+            "#,
         )
         .bind(channel_id)
         .bind(role_ids)
@@ -95,13 +105,16 @@ impl PermissionRepository {
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 
-    pub async fn get_channel_feature_flags(&self, channel_id: Uuid) -> Result<ChannelFeatureFlags, AppError> {
+    pub async fn get_channel_feature_flags(
+        &self,
+        channel_id: Uuid,
+    ) -> Result<ChannelFeatureFlags, AppError> {
         let row = sqlx::query_as::<_, SqlxChannelFeatureFlags>(
             r#"
-            SELECT channel_id, send_file_enabled, voice_group_enabled, video_group_enabled
+            SELECT channel_id, text_enabled, send_file_enabled, voice_group_enabled, video_group_enabled
             FROM channel_feature_flags
             WHERE channel_id = $1
-            "#
+            "#,
         )
         .bind(channel_id)
         .fetch_optional(&self.pool)
@@ -116,7 +129,7 @@ impl PermissionRepository {
             r#"
             SELECT id, space_id, name, slug, kind, visibility
             FROM channels WHERE id = $1
-            "#
+            "#,
         )
         .bind(channel_id)
         .fetch_one(&self.pool)
@@ -145,11 +158,23 @@ pub struct ChannelOverride {
     pub denied: bool,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ChannelFeatureFlags {
+    pub text_enabled: bool,
     pub send_file_enabled: bool,
     pub voice_group_enabled: bool,
     pub video_group_enabled: bool,
+}
+
+impl Default for ChannelFeatureFlags {
+    fn default() -> Self {
+        Self {
+            text_enabled: true,
+            send_file_enabled: true,
+            voice_group_enabled: false,
+            video_group_enabled: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -199,8 +224,10 @@ impl From<SqlxChannelOverride> for ChannelOverride {
 }
 
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct SqlxChannelFeatureFlags {
     channel_id: Uuid,
+    text_enabled: bool,
     send_file_enabled: bool,
     voice_group_enabled: bool,
     video_group_enabled: bool,
@@ -209,6 +236,7 @@ struct SqlxChannelFeatureFlags {
 impl From<SqlxChannelFeatureFlags> for ChannelFeatureFlags {
     fn from(row: SqlxChannelFeatureFlags) -> Self {
         ChannelFeatureFlags {
+            text_enabled: row.text_enabled,
             send_file_enabled: row.send_file_enabled,
             voice_group_enabled: row.voice_group_enabled,
             video_group_enabled: row.video_group_enabled,

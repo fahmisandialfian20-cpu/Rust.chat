@@ -1,6 +1,6 @@
 use time::OffsetDateTime;
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 #[derive(serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct AuditEntry {

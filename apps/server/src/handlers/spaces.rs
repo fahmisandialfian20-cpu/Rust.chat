@@ -1,17 +1,17 @@
 use axum::{
-    extract::{Path, State, Query},
-    response::Json,
+    extract::{Path, Query, State},
     http::StatusCode,
+    response::Json,
 };
 use serde::Deserialize;
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
-use crate::domain::space::{Space, CreateSpace, UpdateSpace};
-use crate::domain::membership::{SpaceMembership, AddMember};
-use crate::state::AppState;
+use crate::domain::membership::{AddMember, SpaceMembership};
+use crate::domain::space::{CreateSpace, Space, UpdateSpace};
 use crate::error::AppError;
+use crate::state::AppState;
 
 #[derive(Deserialize, ToSchema)]
 pub struct ListQuery {
@@ -21,8 +21,12 @@ pub struct ListQuery {
     offset: i64,
 }
 
-fn default_limit() -> i64 { 50 }
-fn default_offset() -> i64 { 0 }
+fn default_limit() -> i64 {
+    50
+}
+fn default_offset() -> i64 {
+    0
+}
 
 #[utoipa::path(
     post,
@@ -115,7 +119,10 @@ pub async fn list_spaces(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Space>>, AppError> {
-    let spaces = state.space_service.list_spaces(query.limit, query.offset).await?;
+    let spaces = state
+        .space_service
+        .list_spaces(query.limit, query.offset)
+        .await?;
     Ok(Json(spaces))
 }
 
@@ -137,7 +144,10 @@ pub async fn list_user_spaces(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Space>>, AppError> {
-    let spaces = state.space_service.list_user_spaces(user_id, query.limit, query.offset).await?;
+    let spaces = state
+        .space_service
+        .list_user_spaces(user_id, query.limit, query.offset)
+        .await?;
     Ok(Json(spaces))
 }
 
@@ -261,7 +271,10 @@ pub async fn list_members(
     Path(space_id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<SpaceMembership>>, AppError> {
-    let members = state.space_service.get_members(space_id, query.limit, query.offset).await?;
+    let members = state
+        .space_service
+        .get_members(space_id, query.limit, query.offset)
+        .await?;
     Ok(Json(members))
 }
 
@@ -287,7 +300,7 @@ pub async fn get_member(
 }
 
 pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{get, post, put, delete};
+    use axum::routing::{delete, get, post, put};
 
     axum::Router::new()
         .route("/spaces", post(create_space))
@@ -299,5 +312,8 @@ pub fn router() -> axum::Router<AppState> {
         .route("/spaces/{space_id}/members", get(list_members))
         .route("/spaces/{space_id}/members", post(add_member))
         .route("/spaces/{space_id}/members/{user_id}", get(get_member))
-        .route("/spaces/{space_id}/members/{user_id}", delete(remove_member))
+        .route(
+            "/spaces/{space_id}/members/{user_id}",
+            delete(remove_member),
+        )
 }

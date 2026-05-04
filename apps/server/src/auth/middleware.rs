@@ -29,7 +29,10 @@ impl AuthUser {
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let claims = if let Some(claims) = parts.extensions.get::<Claims>() {
             claims.clone()
         } else {
@@ -38,7 +41,9 @@ impl FromRequestParts<AppState> for AuthUser {
                 .get("authorization")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.strip_prefix("Bearer "))
-                .ok_or_else(|| AppError::Unauthorized("Missing authorization header".to_string()))?;
+                .ok_or_else(|| {
+                    AppError::Unauthorized("Missing authorization header".to_string())
+                })?;
 
             let token_data = state.jwt_manager.verify_token(auth_header)?;
             token_data.claims
@@ -59,7 +64,9 @@ impl FromRequestParts<AppState> for AuthUser {
                 user_id: claims.sub,
                 session_id: claims.session_id,
             }),
-            None => Err(AppError::Unauthorized("Session revoked or expired".to_string())),
+            None => Err(AppError::Unauthorized(
+                "Session revoked or expired".to_string(),
+            )),
         }
     }
 }
@@ -79,7 +86,11 @@ pub async fn auth_middleware(
     let token = match auth_header {
         Some(t) => t,
         None => {
-            return (StatusCode::UNAUTHORIZED, r#"{"error":"Missing authorization header"}"#).into_response();
+            return (
+                StatusCode::UNAUTHORIZED,
+                r#"{"error":"Missing authorization header"}"#,
+            )
+                .into_response();
         }
     };
 
@@ -88,8 +99,6 @@ pub async fn auth_middleware(
             request.extensions_mut().insert(token_data.claims);
             next.run(request).await
         }
-        Err(e) => {
-            (StatusCode::UNAUTHORIZED, format!(r#"{{"error":"{}"}}"#, e)).into_response()
-        }
+        Err(e) => (StatusCode::UNAUTHORIZED, format!(r#"{{"error":"{}"}}"#, e)).into_response(),
     }
 }

@@ -1,15 +1,12 @@
-use axum::{
-    extract::State,
-    response::Json,
-};
+use axum::{extract::State, response::Json};
 use serde::Deserialize;
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
 use crate::domain::user::ThemePreferences;
-use crate::state::AppState;
 use crate::error::AppError;
+use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateThemeRequest {
@@ -31,7 +28,7 @@ pub async fn get_theme(
         SELECT id, user_id, theme, accent_color, settings, created_at, updated_at
         FROM user_theme_preferences
         WHERE user_id = $1
-        "#
+        "#,
     )
     .bind(user_id)
     .fetch_optional(&state.db)
@@ -42,8 +39,18 @@ pub async fn get_theme(
         Some(r) => {
             let mode = r.theme;
             let accent = r.accent_color.unwrap_or_else(|| "brand".to_string());
-            let density = r.settings.get("density").and_then(|v| v.as_str()).unwrap_or("comfortable").to_string();
-            let message_display = r.settings.get("message_display").and_then(|v| v.as_str()).unwrap_or("cozy").to_string();
+            let density = r
+                .settings
+                .get("density")
+                .and_then(|v| v.as_str())
+                .unwrap_or("comfortable")
+                .to_string();
+            let message_display = r
+                .settings
+                .get("message_display")
+                .and_then(|v| v.as_str())
+                .unwrap_or("cozy")
+                .to_string();
 
             Ok(Json(ThemePreferences {
                 id: r.id,
@@ -77,10 +84,12 @@ pub async fn update_theme(
     let mode = payload.mode.unwrap_or_else(|| "dark".to_string());
     let accent = payload.accent;
     let density = payload.density.unwrap_or_else(|| "comfortable".to_string());
-    let message_display = payload.message_display.unwrap_or_else(|| "cozy".to_string());
+    let message_display = payload
+        .message_display
+        .unwrap_or_else(|| "cozy".to_string());
 
     let existing_settings = sqlx::query_scalar::<_, serde_json::Value>(
-        "SELECT settings FROM user_theme_preferences WHERE user_id = $1"
+        "SELECT settings FROM user_theme_preferences WHERE user_id = $1",
     )
     .bind(user_id)
     .fetch_optional(&state.db)
@@ -94,13 +103,14 @@ pub async fn update_theme(
     };
 
     map.insert("density".to_string(), serde_json::Value::String(density));
-    map.insert("message_display".to_string(), serde_json::Value::String(message_display));
+    map.insert(
+        "message_display".to_string(),
+        serde_json::Value::String(message_display),
+    );
 
-    if let Some(settings) = payload.settings {
-        if let serde_json::Value::Object(obj) = settings {
-            for (k, v) in obj {
-                map.insert(k, v);
-            }
+    if let Some(serde_json::Value::Object(obj)) = payload.settings {
+        for (k, v) in obj {
+            map.insert(k, v);
         }
     }
 
@@ -129,8 +139,18 @@ pub async fn update_theme(
     .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
     let accent = row.accent_color.unwrap_or_else(|| "brand".to_string());
-    let density = row.settings.get("density").and_then(|v| v.as_str()).unwrap_or("comfortable").to_string();
-    let message_display = row.settings.get("message_display").and_then(|v| v.as_str()).unwrap_or("cozy").to_string();
+    let density = row
+        .settings
+        .get("density")
+        .and_then(|v| v.as_str())
+        .unwrap_or("comfortable")
+        .to_string();
+    let message_display = row
+        .settings
+        .get("message_display")
+        .and_then(|v| v.as_str())
+        .unwrap_or("cozy")
+        .to_string();
 
     Ok(Json(ThemePreferences {
         id: row.id,
@@ -146,12 +166,12 @@ pub async fn update_theme(
 #[derive(sqlx::FromRow)]
 struct SqlxTheme {
     id: Uuid,
-    user_id: Uuid,
+    _user_id: Uuid,
     theme: String,
     accent_color: Option<String>,
     settings: serde_json::Value,
-    created_at: OffsetDateTime,
-    updated_at: OffsetDateTime,
+    _created_at: OffsetDateTime,
+    _updated_at: OffsetDateTime,
 }
 
 pub fn router() -> axum::Router<AppState> {

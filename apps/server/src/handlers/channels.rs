@@ -1,16 +1,18 @@
 use axum::{
-    extract::{Path, State, Query},
-    response::Json,
+    extract::{Path, Query, State},
     http::StatusCode,
+    response::Json,
 };
 use serde::Deserialize;
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
-use crate::domain::channel::{Channel, CreateChannel, UpdateChannel, ChannelFeatureFlags, ChannelFeatureFlagsUpdate};
-use crate::state::AppState;
+use crate::domain::channel::{
+    Channel, ChannelFeatureFlags, ChannelFeatureFlagsUpdate, CreateChannel, UpdateChannel,
+};
 use crate::error::AppError;
+use crate::state::AppState;
 
 #[derive(Deserialize, ToSchema)]
 pub struct ListQuery {
@@ -20,8 +22,12 @@ pub struct ListQuery {
     offset: i64,
 }
 
-fn default_limit() -> i64 { 50 }
-fn default_offset() -> i64 { 0 }
+fn default_limit() -> i64 {
+    50
+}
+fn default_offset() -> i64 {
+    0
+}
 
 #[utoipa::path(
     post,
@@ -45,7 +51,10 @@ pub async fn create_channel(
     Json(payload): Json<CreateChannel>,
 ) -> Result<Json<Channel>, AppError> {
     let user_id = auth_user.user_id_uuid()?;
-    let channel = state.channel_service.create_channel(space_id, user_id, payload).await?;
+    let channel = state
+        .channel_service
+        .create_channel(space_id, user_id, payload)
+        .await?;
     state
         .audit_service
         .log(
@@ -100,7 +109,10 @@ pub async fn get_channel_by_slug(
     State(state): State<AppState>,
     Path((space_id, slug)): Path<(Uuid, String)>,
 ) -> Result<Json<Channel>, AppError> {
-    let channel = state.channel_service.get_channel_by_slug(space_id, &slug).await?;
+    let channel = state
+        .channel_service
+        .get_channel_by_slug(space_id, &slug)
+        .await?;
     Ok(Json(channel))
 }
 
@@ -122,7 +134,10 @@ pub async fn list_channels(
     Path(space_id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Channel>>, AppError> {
-    let channels = state.channel_service.list_space_channels(space_id, query.limit, query.offset).await?;
+    let channels = state
+        .channel_service
+        .list_space_channels(space_id, query.limit, query.offset)
+        .await?;
     Ok(Json(channels))
 }
 
@@ -149,7 +164,10 @@ pub async fn list_visible_channels(
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Channel>>, AppError> {
     let user_id = auth_user.user_id_uuid()?;
-    let channels = state.channel_service.list_visible_channels(space_id, user_id, query.limit, query.offset).await?;
+    let channels = state
+        .channel_service
+        .list_visible_channels(space_id, user_id, query.limit, query.offset)
+        .await?;
     Ok(Json(channels))
 }
 
@@ -172,7 +190,10 @@ pub async fn update_channel(
     Path((_space_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<UpdateChannel>,
 ) -> Result<Json<Channel>, AppError> {
-    let channel = state.channel_service.update_channel(channel_id, payload).await?;
+    let channel = state
+        .channel_service
+        .update_channel(channel_id, payload)
+        .await?;
     Ok(Json(channel))
 }
 
@@ -276,7 +297,10 @@ pub async fn update_channel_feature_flags(
     Path((_space_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<ChannelFeatureFlagsUpdate>,
 ) -> Result<Json<ChannelFeatureFlags>, AppError> {
-    let flags = state.channel_service.update_feature_flags(channel_id, payload).await?;
+    let flags = state
+        .channel_service
+        .update_feature_flags(channel_id, payload)
+        .await?;
     Ok(Json(flags))
 }
 
@@ -298,7 +322,10 @@ pub async fn add_channel_member(
     State(state): State<AppState>,
     Path((_space_id, channel_id, user_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<StatusCode, AppError> {
-    state.channel_service.add_member(channel_id, user_id).await?;
+    state
+        .channel_service
+        .add_member(channel_id, user_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -320,23 +347,50 @@ pub async fn remove_channel_member(
     State(state): State<AppState>,
     Path((_space_id, channel_id, user_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<StatusCode, AppError> {
-    state.channel_service.remove_member(channel_id, user_id).await?;
+    state
+        .channel_service
+        .remove_member(channel_id, user_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{get, post, put, delete};
+    use axum::routing::{delete, get, post, put};
 
     axum::Router::new()
         .route("/spaces/{space_id}/channels", post(create_channel))
         .route("/spaces/{space_id}/channels", get(list_channels))
-        .route("/spaces/{space_id}/channels/visible", get(list_visible_channels))
+        .route(
+            "/spaces/{space_id}/channels/visible",
+            get(list_visible_channels),
+        )
         .route("/spaces/{space_id}/channels/{channel_id}", get(get_channel))
-        .route("/spaces/{space_id}/channels/slug/{slug}", get(get_channel_by_slug))
-        .route("/spaces/{space_id}/channels/{channel_id}", put(update_channel))
-        .route("/spaces/{space_id}/channels/{channel_id}", delete(archive_channel))
-        .route("/spaces/{space_id}/channels/{channel_id}/feature-flags", get(get_channel_feature_flags))
-        .route("/spaces/{space_id}/channels/{channel_id}/feature-flags", put(update_channel_feature_flags))
-        .route("/spaces/{space_id}/channels/{channel_id}/members/{user_id}", put(add_channel_member))
-        .route("/spaces/{space_id}/channels/{channel_id}/members/{user_id}", delete(remove_channel_member))
+        .route(
+            "/spaces/{space_id}/channels/slug/{slug}",
+            get(get_channel_by_slug),
+        )
+        .route(
+            "/spaces/{space_id}/channels/{channel_id}",
+            put(update_channel),
+        )
+        .route(
+            "/spaces/{space_id}/channels/{channel_id}",
+            delete(archive_channel),
+        )
+        .route(
+            "/spaces/{space_id}/channels/{channel_id}/feature-flags",
+            get(get_channel_feature_flags),
+        )
+        .route(
+            "/spaces/{space_id}/channels/{channel_id}/feature-flags",
+            put(update_channel_feature_flags),
+        )
+        .route(
+            "/spaces/{space_id}/channels/{channel_id}/members/{user_id}",
+            put(add_channel_member),
+        )
+        .route(
+            "/spaces/{space_id}/channels/{channel_id}/members/{user_id}",
+            delete(remove_channel_member),
+        )
 }

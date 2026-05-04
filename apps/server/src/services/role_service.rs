@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::domain::role::{RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest};
-use crate::repositories::role_repository::RoleRepository;
-use crate::permissions::PermissionService;
-use crate::permissions::PermissionKey;
+use crate::domain::role::{CreateRoleRequest, RoleWithPermissions, UpdateRoleRequest};
 use crate::error::AppError;
+use crate::permissions::PermissionKey;
+use crate::permissions::PermissionService;
+use crate::repositories::role_repository::RoleRepository;
 
 #[derive(Clone)]
 pub struct RoleService {
@@ -14,11 +14,11 @@ pub struct RoleService {
 }
 
 impl RoleService {
-    pub fn new(
-        repository: Arc<RoleRepository>,
-        permission_service: PermissionService,
-    ) -> Self {
-        Self { repository, permission_service }
+    pub fn new(repository: Arc<RoleRepository>, permission_service: PermissionService) -> Self {
+        Self {
+            repository,
+            permission_service,
+        }
     }
 
     pub async fn create_role(
@@ -27,17 +27,24 @@ impl RoleService {
         actor: Uuid,
         input: CreateRoleRequest,
     ) -> Result<RoleWithPermissions, AppError> {
-        self.permission_service.check(actor, PermissionKey::ManageRoles, Some(space_id), None).await?;
+        self.permission_service
+            .check(actor, PermissionKey::ManageRoles, Some(space_id), None)
+            .await?;
 
         let role = self.repository.create(space_id, &input.name, false).await?;
 
         if !input.permission_keys.is_empty() {
-            self.repository.set_permissions(role.id, &input.permission_keys, true).await?;
+            self.repository
+                .set_permissions(role.id, &input.permission_keys, true)
+                .await?;
         }
 
         let keys = self.repository.get_permission_keys(role.id).await?;
 
-        Ok(RoleWithPermissions { role, permission_keys: keys })
+        Ok(RoleWithPermissions {
+            role,
+            permission_keys: keys,
+        })
     }
 
     pub async fn list_roles(
@@ -45,14 +52,19 @@ impl RoleService {
         space_id: Uuid,
         actor: Uuid,
     ) -> Result<Vec<RoleWithPermissions>, AppError> {
-        self.permission_service.check(actor, PermissionKey::ViewSpace, Some(space_id), None).await?;
+        self.permission_service
+            .check(actor, PermissionKey::ViewSpace, Some(space_id), None)
+            .await?;
 
         let roles = self.repository.find_by_space(space_id).await?;
         let mut result = Vec::new();
 
         for role in roles {
             let keys = self.repository.get_permission_keys(role.id).await?;
-            result.push(RoleWithPermissions { role, permission_keys: keys });
+            result.push(RoleWithPermissions {
+                role,
+                permission_keys: keys,
+            });
         }
 
         Ok(result)
@@ -65,11 +77,16 @@ impl RoleService {
     ) -> Result<RoleWithPermissions, AppError> {
         let role = self.repository.find_by_id(role_id).await?;
 
-        self.permission_service.check(actor, PermissionKey::ViewSpace, Some(role.space_id), None).await?;
+        self.permission_service
+            .check(actor, PermissionKey::ViewSpace, Some(role.space_id), None)
+            .await?;
 
         let keys = self.repository.get_permission_keys(role.id).await?;
 
-        Ok(RoleWithPermissions { role, permission_keys: keys })
+        Ok(RoleWithPermissions {
+            role,
+            permission_keys: keys,
+        })
     }
 
     pub async fn update_role(
@@ -80,33 +97,40 @@ impl RoleService {
     ) -> Result<RoleWithPermissions, AppError> {
         let role = self.repository.find_by_id(role_id).await?;
 
-        self.permission_service.check(actor, PermissionKey::ManageRoles, Some(role.space_id), None).await?;
+        self.permission_service
+            .check(actor, PermissionKey::ManageRoles, Some(role.space_id), None)
+            .await?;
 
         let name = input.name.unwrap_or(role.name);
 
         let updated = self.repository.update(role_id, &name).await?;
 
         if let Some(keys) = input.permission_keys {
-            self.repository.set_permissions(role_id, &keys, true).await?;
+            self.repository
+                .set_permissions(role_id, &keys, true)
+                .await?;
         }
 
         let permission_keys = self.repository.get_permission_keys(role_id).await?;
 
-        Ok(RoleWithPermissions { role: updated, permission_keys })
+        Ok(RoleWithPermissions {
+            role: updated,
+            permission_keys,
+        })
     }
 
-    pub async fn delete_role(
-        &self,
-        role_id: Uuid,
-        actor: Uuid,
-    ) -> Result<(), AppError> {
+    pub async fn delete_role(&self, role_id: Uuid, actor: Uuid) -> Result<(), AppError> {
         let role = self.repository.find_by_id(role_id).await?;
 
         if role.is_default {
-            return Err(AppError::BadRequest("Cannot delete the @everyone default role".to_string()));
+            return Err(AppError::BadRequest(
+                "Cannot delete the @everyone default role".to_string(),
+            ));
         }
 
-        self.permission_service.check(actor, PermissionKey::ManageRoles, Some(role.space_id), None).await?;
+        self.permission_service
+            .check(actor, PermissionKey::ManageRoles, Some(role.space_id), None)
+            .await?;
 
         self.repository.delete(role_id).await
     }
@@ -118,11 +142,18 @@ impl RoleService {
         role_id: Uuid,
         actor: Uuid,
     ) -> Result<(), AppError> {
-        self.permission_service.check(actor, PermissionKey::ManageRoles, Some(space_id), None).await?;
+        self.permission_service
+            .check(actor, PermissionKey::ManageRoles, Some(space_id), None)
+            .await?;
 
-        let membership_id = self.repository.find_membership_id(space_id, member_user_id).await?;
+        let membership_id = self
+            .repository
+            .find_membership_id(space_id, member_user_id)
+            .await?;
 
-        self.repository.assign_role_to_member(membership_id, role_id).await
+        self.repository
+            .assign_role_to_member(membership_id, role_id)
+            .await
     }
 
     pub async fn remove_role(
@@ -132,10 +163,17 @@ impl RoleService {
         role_id: Uuid,
         actor: Uuid,
     ) -> Result<(), AppError> {
-        self.permission_service.check(actor, PermissionKey::ManageRoles, Some(space_id), None).await?;
+        self.permission_service
+            .check(actor, PermissionKey::ManageRoles, Some(space_id), None)
+            .await?;
 
-        let membership_id = self.repository.find_membership_id(space_id, member_user_id).await?;
+        let membership_id = self
+            .repository
+            .find_membership_id(space_id, member_user_id)
+            .await?;
 
-        self.repository.remove_role_from_member(membership_id, role_id).await
+        self.repository
+            .remove_role_from_member(membership_id, role_id)
+            .await
     }
 }

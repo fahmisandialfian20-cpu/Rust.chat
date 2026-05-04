@@ -1,6 +1,6 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::domain::message::Message;
 use crate::error::AppError;
@@ -34,7 +34,7 @@ impl MessageRepository {
         .bind(author_user_id)
         .bind(&content)
         .bind(&kind)
-        .bind(&reply_to_message_id)
+        .bind(reply_to_message_id)
         .bind(OffsetDateTime::now_utc())
         .fetch_one(&self.pool)
         .await
@@ -75,7 +75,7 @@ impl MessageRepository {
                 WHERE channel_id = $1 AND id < $2 AND deleted_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT $3
-                "#
+                "#,
             )
         } else {
             sqlx::query_as::<_, SqlxMessage>(
@@ -85,7 +85,7 @@ impl MessageRepository {
                 WHERE channel_id = $1 AND deleted_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT $2
-                "#
+                "#,
             )
         };
 
@@ -132,14 +132,12 @@ impl MessageRepository {
     }
 
     pub async fn soft_delete(&self, id: Uuid) -> Result<(), AppError> {
-        let result = sqlx::query(
-            "UPDATE messages SET deleted_at = $1 WHERE id = $2"
-        )
-        .bind(OffsetDateTime::now_utc())
-        .bind(id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let result = sqlx::query("UPDATE messages SET deleted_at = $1 WHERE id = $2")
+            .bind(OffsetDateTime::now_utc())
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound("Message not found".to_string()));

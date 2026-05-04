@@ -3,15 +3,20 @@ use uuid::Uuid;
 
 use crate::domain::file_object::FileObject;
 use crate::error::AppError;
+use crate::permissions::{PermissionKey, PermissionService};
 use crate::repositories::file_repository::FileRepository;
 use crate::storage::FileStorage;
-use crate::permissions::{PermissionKey, PermissionService};
 
 const MIME_ALLOWLIST: &[&str] = &[
-    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
     "application/pdf",
     "text/plain",
-    "application/zip", "application/x-tar", "application/gzip",
+    "application/zip",
+    "application/x-tar",
+    "application/gzip",
 ];
 
 #[derive(Clone)]
@@ -29,7 +34,12 @@ impl FileService {
         permission_service: PermissionService,
         max_upload_bytes: i64,
     ) -> Self {
-        Self { repo, storage, permission_service, max_upload_bytes }
+        Self {
+            repo,
+            storage,
+            permission_service,
+            max_upload_bytes,
+        }
     }
 
     pub async fn upload(
@@ -59,24 +69,30 @@ impl FileService {
         }
 
         if let Some(cid) = channel_id {
-            self.permission_service.check(user_id, PermissionKey::SendFiles, space_id, Some(cid)).await?;
+            self.permission_service
+                .check(user_id, PermissionKey::SendFiles, space_id, Some(cid))
+                .await?;
         }
 
         let storage_key = format!("{}/{}", user_id, Uuid::now_v7());
 
-        self.storage.upload(&storage_key, &data, &content_type)
+        self.storage
+            .upload(&storage_key, &data, &content_type)
             .await
-            .map_err(|e| AppError::InternalServerError(e))?;
+            .map_err(AppError::InternalServerError)?;
 
-        let file = self.repo.create(
-            space_id,
-            channel_id,
-            user_id,
-            filename,
-            content_type,
-            size,
-            storage_key,
-        ).await?;
+        let file = self
+            .repo
+            .create(
+                space_id,
+                channel_id,
+                user_id,
+                filename,
+                content_type,
+                size,
+                storage_key,
+            )
+            .await?;
 
         Ok(file)
     }
@@ -85,12 +101,20 @@ impl FileService {
         let file = self.repo.find_by_id(file_id).await?;
 
         if let Some(cid) = file.channel_id {
-            self.permission_service.check_optional(user_id, PermissionKey::ViewChannel, file.space_id, Some(cid)).await?;
+            self.permission_service
+                .check_optional(
+                    user_id,
+                    PermissionKey::ViewChannel,
+                    file.space_id,
+                    Some(cid),
+                )
+                .await?;
         }
 
-        self.storage.download_url(&file.storage_key)
+        self.storage
+            .download_url(&file.storage_key)
             .await
-            .map_err(|e| AppError::InternalServerError(e))
+            .map_err(AppError::InternalServerError)
     }
 
     pub async fn get_file(&self, file_id: Uuid) -> Result<FileObject, AppError> {
@@ -101,12 +125,15 @@ impl FileService {
         let file = self.repo.find_by_id(file_id).await?;
 
         if file.uploader_user_id != user_id {
-            return Err(AppError::Forbidden("You can only delete your own files".to_string()));
+            return Err(AppError::Forbidden(
+                "You can only delete your own files".to_string(),
+            ));
         }
 
-        self.storage.delete(&file.storage_key)
+        self.storage
+            .delete(&file.storage_key)
             .await
-            .map_err(|e| AppError::InternalServerError(e))?;
+            .map_err(AppError::InternalServerError)?;
 
         self.repo.delete(file_id).await
     }

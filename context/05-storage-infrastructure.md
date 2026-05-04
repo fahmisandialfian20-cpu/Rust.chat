@@ -38,6 +38,26 @@ PostgreSQL is preferred for this project because it works well with relational p
 
 Do not switch to MariaDB/MySQL unless a dedicated database decision task is created.
 
+### Alternatives
+
+#### Supabase (Cloud PostgreSQL)
+
+Supabase is a valid alternative to local PostgreSQL. It provides managed PostgreSQL with SSL.
+
+**How to use:**
+1. Get connection string from Supabase Dashboard → Settings → Database → Connection string
+2. Format: `postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres`
+3. Update `DATABASE_URL` and `TEST_DATABASE_URL` in `.env`
+
+**⚠️ Warning for testing:**
+- Tests run `DROP SCHEMA public CASCADE` on every test run
+- Use a dedicated Supabase project for development/testing
+- Do NOT use production database for tests
+
+#### Local PostgreSQL (Docker or native)
+
+Standard Docker Compose workflow (see Local Development Infrastructure below).
+
 ---
 
 ## Redis
@@ -55,6 +75,14 @@ Use Redis for:
 - short-lived WebSocket state
 
 Redis is not the durable source of truth for messages, spaces, roles, or permissions.
+
+### Running Redis Without Docker
+
+If Docker is not available, Redis can run through:
+
+- **WSL2** (recommended for Windows): Install Redis in WSL2, expose port 6379
+- **Native Windows**: Redis for Windows (unofficial, limited)
+- **Upstash Redis** (cloud): `REDIS_URL=rediss://default:<token>@<host>`
 
 ---
 
@@ -115,6 +143,7 @@ Important variables:
 SERVER_HOST
 SERVER_PORT
 DATABASE_URL
+TEST_DATABASE_URL          # Required for cargo test (same as DATABASE_URL or separate test DB)
 REDIS_URL
 SESSION_SECRET
 PASSWORD_PEPPER

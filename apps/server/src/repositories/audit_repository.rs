@@ -73,11 +73,7 @@ impl AuditRepository {
         Ok(())
     }
 
-    pub async fn find_all(
-        &self,
-        limit: i64,
-        offset: i64,
-    ) -> Result<Vec<AuditEntry>, AppError> {
+    pub async fn find_all(&self, limit: i64, offset: i64) -> Result<Vec<AuditEntry>, AppError> {
         let rows = sqlx::query_as::<_, SqlxAuditEntry>(
             r#"
             SELECT id, user_id, space_id, action, target_user_id, target_space_id, target_channel_id, metadata, ip_address, user_agent, created_at

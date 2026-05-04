@@ -18,7 +18,9 @@ impl RateLimiter {
             .arg(key)
             .query_async(&mut conn)
             .await
-            .map_err(|e| AppError::InternalServerError(format!("Rate limit check failed: {}", e)))?;
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Rate limit check failed: {}", e))
+            })?;
 
         if count == 1 {
             let _: Result<(), _> = redis::cmd("EXPIRE")

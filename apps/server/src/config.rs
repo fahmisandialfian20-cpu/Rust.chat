@@ -71,20 +71,17 @@ impl AppConfig {
                     .expect("SERVER_PORT must be a number"),
             },
             database: DatabaseConfig {
-                url: std::env::var("DATABASE_URL")
-                    .expect("DATABASE_URL must be set"),
+                url: std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
             },
             redis: RedisConfig {
-                url: std::env::var("REDIS_URL")
-                    .expect("REDIS_URL must be set"),
+                url: std::env::var("REDIS_URL").expect("REDIS_URL must be set"),
             },
             auth: AuthConfig {
                 session_secret: std::env::var("SESSION_SECRET")
                     .expect("SESSION_SECRET must be set"),
                 password_pepper: std::env::var("PASSWORD_PEPPER")
                     .expect("PASSWORD_PEPPER must be set"),
-                jwt_secret: std::env::var("JWT_SECRET")
-                    .expect("JWT_SECRET must be set"),
+                jwt_secret: std::env::var("JWT_SECRET").expect("JWT_SECRET must be set"),
                 jwt_access_ttl_seconds: std::env::var("JWT_ACCESS_TTL_SECONDS")
                     .unwrap_or_else(|_| "900".to_string())
                     .parse()
@@ -105,8 +102,7 @@ impl AppConfig {
                     .unwrap_or(false),
                 url: std::env::var("LIVEKIT_URL")
                     .unwrap_or_else(|_| "ws://localhost:7880".to_string()),
-                api_key: std::env::var("LIVEKIT_API_KEY")
-                    .unwrap_or_else(|_| "devkey".to_string()),
+                api_key: std::env::var("LIVEKIT_API_KEY").unwrap_or_else(|_| "devkey".to_string()),
                 api_secret: std::env::var("LIVEKIT_API_SECRET")
                     .unwrap_or_else(|_| "secret".to_string()),
             },

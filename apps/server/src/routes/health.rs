@@ -1,6 +1,6 @@
-use axum::{routing::get, Router};
 use crate::error::AppError;
 use crate::state::AppState;
+use axum::{routing::get, Router};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -29,7 +29,9 @@ pub async fn healthz() -> &'static str {
         (status = 503, description = "Database or Redis not ready"),
     ),
 )]
-pub async fn readyz(axum::extract::State(state): axum::extract::State<AppState>) -> Result<&'static str, AppError> {
+pub async fn readyz(
+    axum::extract::State(state): axum::extract::State<AppState>,
+) -> Result<&'static str, AppError> {
     sqlx::query("SELECT 1")
         .execute(&state.db)
         .await

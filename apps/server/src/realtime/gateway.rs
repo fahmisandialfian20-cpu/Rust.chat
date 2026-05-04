@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
 use crate::error::AppError;
-use crate::realtime::events::{WsEvent, HelloData};
+use crate::realtime::events::{HelloData, WsEvent};
 use crate::state::AppState;
 
 pub async fn ws_upgrade(
@@ -18,17 +18,10 @@ pub async fn ws_upgrade(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = auth_user.user_id_uuid()?;
 
-    Ok(ws.on_upgrade(move |socket| {
-        handle_socket(socket, state, user_id, auth_user.session_id)
-    }))
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, user_id, auth_user.session_id)))
 }
 
-async fn handle_socket(
-    socket: WebSocket,
-    state: AppState,
-    user_id: Uuid,
-    session_id: String,
-) {
+async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, session_id: String) {
     let (mut sender, mut receiver) = socket.split();
 
     let hello = WsEvent::Hello(HelloData {
@@ -36,7 +29,11 @@ async fn handle_socket(
         session_id: session_id.clone(),
     });
 
-    if sender.send(Message::Text(hello.to_json().into())).await.is_err() {
+    if sender
+        .send(Message::Text(hello.to_json().into()))
+        .await
+        .is_err()
+    {
         return;
     }
 

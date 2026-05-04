@@ -1,6 +1,6 @@
+use crate::domain::message::Message;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::domain::message::Message;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", content = "data")]

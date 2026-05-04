@@ -1,6 +1,8 @@
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use jsonwebtoken::{
+    decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 
@@ -42,7 +44,11 @@ impl JwtManager {
             .map_err(|e| AppError::InternalServerError(e.to_string()))
     }
 
-    pub fn create_refresh_token(&self, user_id: &str, session_id: &str) -> Result<String, AppError> {
+    pub fn create_refresh_token(
+        &self,
+        user_id: &str,
+        session_id: &str,
+    ) -> Result<String, AppError> {
         let now = Utc::now().timestamp();
         let claims = Claims {
             sub: user_id.to_string(),

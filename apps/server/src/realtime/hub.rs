@@ -1,6 +1,6 @@
-use tokio::sync::broadcast;
 use crate::realtime::events::WsEvent;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 
 pub type Hub = Arc<RealtimeHub>;
 
@@ -22,7 +22,7 @@ impl RealtimeHub {
         let _ = self.tx.send(event.to_json());
     }
 
-    pub fn publish_to_channel(&self, channel_id: &str, event: WsEvent) {
+    pub fn publish_to_channel(&self, _channel_id: &str, event: WsEvent) {
         self.publish(event);
     }
 }

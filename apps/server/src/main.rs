@@ -1,43 +1,43 @@
+use axum::http::HeaderName;
+use rust_chat_server::docs::openapi::ApiDoc;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::sensitive_headers::SetSensitiveRequestHeadersLayer;
-use axum::http::HeaderName;
+use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
-use rust_chat_server::docs::openapi::ApiDoc;
 
-use rust_chat_server::config::AppConfig;
-use rust_chat_server::state::AppState;
 use rust_chat_server::auth::jwt::JwtManager;
 use rust_chat_server::auth::session::SessionManager;
-use rust_chat_server::repositories::user_repository::UserRepository;
-use rust_chat_server::repositories::space_repository::SpaceRepository;
+use rust_chat_server::config::AppConfig;
+use rust_chat_server::middleware::rate_limit::RateLimiter;
+use rust_chat_server::permissions::PermissionService;
+use rust_chat_server::repositories::audit_repository::AuditRepository;
 use rust_chat_server::repositories::channel_repository::ChannelRepository;
+use rust_chat_server::repositories::file_repository::FileRepository;
 use rust_chat_server::repositories::invite_repository::InviteRepository;
 use rust_chat_server::repositories::message_repository::MessageRepository;
-use rust_chat_server::repositories::file_repository::FileRepository;
-use rust_chat_server::repositories::audit_repository::AuditRepository;
 use rust_chat_server::repositories::role_repository::RoleRepository;
-use rust_chat_server::services::auth_service::AuthService;
+use rust_chat_server::repositories::space_repository::SpaceRepository;
+use rust_chat_server::repositories::user_repository::UserRepository;
 use rust_chat_server::services::audit_service::AuditService;
-use rust_chat_server::services::file_service::FileService;
-use rust_chat_server::permissions::PermissionService;
-use rust_chat_server::storage::provider::create_storage_provider;
-use rust_chat_server::services::space_service::SpaceService;
+use rust_chat_server::services::auth_service::AuthService;
 use rust_chat_server::services::channel_service::ChannelService;
+use rust_chat_server::services::file_service::FileService;
 use rust_chat_server::services::invite_service::InviteService;
 use rust_chat_server::services::message_service::MessageService;
-use rust_chat_server::middleware::rate_limit::RateLimiter;
 use rust_chat_server::services::presence_service::PresenceService;
-use rust_chat_server::services::typing_service::TypingService;
 use rust_chat_server::services::role_service::RoleService;
+use rust_chat_server::services::space_service::SpaceService;
+use rust_chat_server::services::typing_service::TypingService;
+use rust_chat_server::state::AppState;
+use rust_chat_server::storage::provider::create_storage_provider;
 
 #[tokio::main]
 async fn main() {
-    let _ = rust_chat_server::telemetry::init();
+    rust_chat_server::telemetry::init();
 
     let config = AppConfig::from_env();
 
@@ -45,8 +45,8 @@ async fn main() {
         .await
         .expect("Failed to connect to database");
 
-    let redis_client = redis::Client::open(config.redis.url.as_str())
-        .expect("Failed to create Redis client");
+    let redis_client =
+        redis::Client::open(config.redis.url.as_str()).expect("Failed to create Redis client");
 
     let redis = redis_client
         .get_connection_manager()
@@ -78,7 +78,12 @@ async fn main() {
 
     let space_service = SpaceService::new(space_repo.clone(), role_repo.clone());
     let channel_service = ChannelService::new(channel_repo.clone());
-    let invite_service = InviteService::new(invite_repo, space_repo.clone(), channel_repo.clone(), role_repo.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo.clone(),
+        channel_repo.clone(),
+        role_repo.clone(),
+    );
     let message_service = MessageService::new(message_repo);
     let presence_service = PresenceService::new(redis.clone());
     let typing_service = TypingService::new(redis.clone());
@@ -100,10 +105,7 @@ async fn main() {
         max_upload_bytes,
     );
 
-    let role_service = RoleService::new(
-        role_repo,
-        permission_service.clone(),
-    );
+    let role_service = RoleService::new(role_repo, permission_service.clone());
 
     let rate_limiter = RateLimiter::new(redis.clone());
 
@@ -135,7 +137,10 @@ async fn main() {
     let app = axum::Router::new()
         .merge(rust_chat_server::routes::health::router())
         .merge(rust_chat_server::handlers::auth::router())
-        .route("/api/v1/ws", axum::routing::any(rust_chat_server::realtime::gateway::ws_upgrade))
+        .route(
+            "/api/v1/ws",
+            axum::routing::any(rust_chat_server::realtime::gateway::ws_upgrade),
+        )
         .nest("/api/v1", rust_chat_server::handlers::spaces::router())
         .nest("/api/v1", rust_chat_server::handlers::channels::router())
         .nest("/api/v1", rust_chat_server::handlers::invites::router())
@@ -154,10 +159,7 @@ async fn main() {
         )
         .with_state(state);
 
-    let addr = SocketAddr::new(
-        config.server.host.parse().unwrap(),
-        config.server.port,
-    );
+    let addr = SocketAddr::new(config.server.host.parse().unwrap(), config.server.port);
 
     println!("Server running on {}", addr);
     axum::serve(

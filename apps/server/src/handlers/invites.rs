@@ -1,16 +1,16 @@
 use axum::{
-    extract::{Path, State, Query},
-    response::Json,
+    extract::{Path, Query, State},
     http::StatusCode,
+    response::Json,
 };
 use serde::Deserialize;
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
-use crate::domain::invite::{Invite, CreateInvite};
-use crate::state::AppState;
+use crate::domain::invite::{CreateInvite, Invite};
 use crate::error::AppError;
+use crate::state::AppState;
 
 #[derive(Deserialize, ToSchema)]
 pub struct ListQuery {
@@ -20,8 +20,12 @@ pub struct ListQuery {
     offset: i64,
 }
 
-fn default_limit() -> i64 { 50 }
-fn default_offset() -> i64 { 0 }
+fn default_limit() -> i64 {
+    50
+}
+fn default_offset() -> i64 {
+    0
+}
 
 #[utoipa::path(
     post,
@@ -36,7 +40,10 @@ pub async fn create_invite(
     State(state): State<AppState>,
     Json(payload): Json<CreateInvite>,
 ) -> Result<Json<Invite>, AppError> {
-    let invite = state.invite_service.create_invite(Uuid::nil(), payload).await?;
+    let invite = state
+        .invite_service
+        .create_invite(Uuid::nil(), payload)
+        .await?;
     Ok(Json(invite))
 }
 
@@ -138,7 +145,10 @@ pub async fn list_space_invites(
     Path(space_id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Invite>>, AppError> {
-    let invites = state.invite_service.list_space_invites(space_id, query.limit, query.offset).await?;
+    let invites = state
+        .invite_service
+        .list_space_invites(space_id, query.limit, query.offset)
+        .await?;
     Ok(Json(invites))
 }
 
@@ -188,7 +198,7 @@ pub async fn accept_invite(
 }
 
 pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{get, post, delete};
+    use axum::routing::{delete, get, post};
 
     axum::Router::new()
         .route("/invites", post(create_invite))

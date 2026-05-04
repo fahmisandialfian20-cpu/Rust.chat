@@ -22,9 +22,7 @@ async fn bootstrap_first_user(app: &axum::Router) -> Value {
                 .method("POST")
                 .uri("/api/v1/auth/bootstrap-owner")
                 .header("content-type", "application/json")
-                .body(Body::from(
-                    r#"{"username":"admin","password":"secret123"}"#,
-                ))
+                .body(Body::from(r#"{"username":"admin","password":"secret123"}"#))
                 .unwrap(),
         )
         .await
@@ -159,5 +157,24 @@ async fn logout_invalidates_token() {
     // For now, logout only revokes the Redis session, not the JWT.
     // The /me endpoint uses AuthUser which validates JWT directly.
     // Expecting OK since JWT validation doesn't check session.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn unauthenticated_request_rejected() {
+    let (app, _pool) = common::setup_test_app().await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/auth/me")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

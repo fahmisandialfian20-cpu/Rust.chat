@@ -1,12 +1,12 @@
-use uuid::Uuid;
-use time::OffsetDateTime;
-use crate::domain::invite::{Invite, CreateInvite};
-use crate::repositories::invite_repository::InviteRepository;
-use crate::repositories::space_repository::SpaceRepository;
-use crate::repositories::channel_repository::ChannelRepository;
-use crate::repositories::role_repository::RoleRepository;
+use crate::domain::invite::{CreateInvite, Invite};
 use crate::error::AppError;
+use crate::repositories::channel_repository::ChannelRepository;
+use crate::repositories::invite_repository::InviteRepository;
+use crate::repositories::role_repository::RoleRepository;
+use crate::repositories::space_repository::SpaceRepository;
 use std::sync::Arc;
+use time::OffsetDateTime;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct InviteService {
@@ -23,7 +23,12 @@ impl InviteService {
         channel_repo: Arc<ChannelRepository>,
         role_repo: Arc<RoleRepository>,
     ) -> Self {
-        Self { repository, space_repo, channel_repo, role_repo }
+        Self {
+            repository,
+            space_repo,
+            channel_repo,
+            role_repo,
+        }
     }
 
     pub async fn create_invite(
@@ -33,17 +38,21 @@ impl InviteService {
     ) -> Result<Invite, AppError> {
         if let Some(expires_at) = input.expires_at {
             if expires_at < OffsetDateTime::now_utc() {
-                return Err(AppError::BadRequest("Expiration must be in the future".to_string()));
+                return Err(AppError::BadRequest(
+                    "Expiration must be in the future".to_string(),
+                ));
             }
         }
 
-        self.repository.create(
-            input.space_id,
-            input.channel_id,
-            user_id,
-            input.max_uses,
-            input.expires_at,
-        ).await
+        self.repository
+            .create(
+                input.space_id,
+                input.channel_id,
+                user_id,
+                input.max_uses,
+                input.expires_at,
+            )
+            .await
     }
 
     pub async fn get_invite(&self, invite_id: Uuid) -> Result<Invite, AppError> {
@@ -56,7 +65,9 @@ impl InviteService {
 
     pub async fn validate_invite(&self, code: &str) -> Result<Invite, AppError> {
         if !self.repository.is_valid(code).await? {
-            return Err(AppError::BadRequest("Invite is invalid or expired".to_string()));
+            return Err(AppError::BadRequest(
+                "Invite is invalid or expired".to_string(),
+            ));
         }
 
         self.repository.find_by_code(code).await
@@ -78,7 +89,9 @@ impl InviteService {
 
             let roles = self.role_repo.find_by_space(space_id).await?;
             if let Some(everyone) = roles.iter().find(|r| r.is_default) {
-                self.role_repo.assign_role_to_member(membership.id, everyone.id).await?;
+                self.role_repo
+                    .assign_role_to_member(membership.id, everyone.id)
+                    .await?;
             }
 
             self.repository.increment_used_count(invite.id).await?;
@@ -93,7 +106,12 @@ impl InviteService {
         }
     }
 
-    pub async fn list_space_invites(&self, space_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Invite>, AppError> {
+    pub async fn list_space_invites(
+        &self,
+        space_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Invite>, AppError> {
         self.repository.find_by_space(space_id, limit, offset).await
     }
 

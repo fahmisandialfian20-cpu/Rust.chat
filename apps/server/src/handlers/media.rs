@@ -3,8 +3,8 @@ use axum::{
     response::Json,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
 use crate::domain::channel::ChannelKind;
@@ -17,7 +17,7 @@ pub struct MediaTokenRequest {
     mode: String,
     intent: String,
     #[serde(default)]
-    client_type: Option<String>,
+    _client_type: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]

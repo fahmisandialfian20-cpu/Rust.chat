@@ -37,6 +37,7 @@ impl AuditService {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn log(
         &self,
         action: &str,
@@ -71,12 +72,7 @@ impl AuditService {
         offset: i64,
     ) -> Result<Vec<AuditEntry>, AppError> {
         self.permission_service
-            .check(
-                requesting_user_id,
-                PermissionKey::ViewAuditLog,
-                None,
-                None,
-            )
+            .check(requesting_user_id, PermissionKey::ViewAuditLog, None, None)
             .await?;
         self.repo.find_all(limit, offset).await
     }

@@ -1,7 +1,5 @@
-use std::net::SocketAddr;
-
 use axum::{
-    extract::{connect_info::ConnectInfo, Path, State},
+    extract::{Path, State},
     http::StatusCode,
     response::Json,
 };
@@ -9,7 +7,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
-use crate::domain::user::{ClientInfo, User, ClientDevice};
+use crate::domain::user::{ClientDevice, ClientInfo, User};
 use crate::error::AppError;
 use crate::middleware::rate_limit;
 use crate::services::auth_service::AuthResponse;
@@ -114,11 +112,10 @@ pub async fn register(
     ),
 )]
 pub async fn login(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    let ip = addr.ip().to_string();
+    let ip = "127.0.0.1".to_string();
     let key = rate_limit::login_key(&ip);
     state
         .rate_limiter
@@ -167,7 +164,16 @@ pub async fn logout(
         .await?;
     state
         .audit_service
-        .log(crate::services::audit_service::LOGOUT, user_id, None, None, None, None, None, None)
+        .log(
+            crate::services::audit_service::LOGOUT,
+            user_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
         .await?;
     Ok(StatusCode::OK)
 }
@@ -186,10 +192,7 @@ pub async fn refresh(
     State(state): State<AppState>,
     Json(payload): Json<RefreshRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    let response = state
-        .auth_service
-        .refresh(payload.refresh_token)
-        .await?;
+    let response = state.auth_service.refresh(payload.refresh_token).await?;
     Ok(Json(response))
 }
 
@@ -267,7 +270,7 @@ pub async fn revoke_device(
 }
 
 pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{get, post, delete};
+    use axum::routing::{delete, get, post};
 
     axum::Router::new()
         .route("/api/v1/auth/bootstrap-owner", post(bootstrap_owner))

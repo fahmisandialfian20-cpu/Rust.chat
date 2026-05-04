@@ -1,14 +1,14 @@
 use axum::{
     extract::{Path, State},
-    response::Json,
     http::StatusCode,
+    response::Json,
 };
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
-use crate::domain::role::{RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest};
-use crate::state::AppState;
+use crate::domain::role::{CreateRoleRequest, RoleWithPermissions, UpdateRoleRequest};
 use crate::error::AppError;
+use crate::state::AppState;
 
 pub async fn list_roles(
     State(state): State<AppState>,
@@ -27,7 +27,10 @@ pub async fn create_role(
     Json(payload): Json<CreateRoleRequest>,
 ) -> Result<Json<RoleWithPermissions>, AppError> {
     let user_id = auth_user.user_id_uuid()?;
-    let role = state.role_service.create_role(space_id, user_id, payload).await?;
+    let role = state
+        .role_service
+        .create_role(space_id, user_id, payload)
+        .await?;
     Ok(Json(role))
 }
 
@@ -48,7 +51,10 @@ pub async fn update_role(
     Json(payload): Json<UpdateRoleRequest>,
 ) -> Result<Json<RoleWithPermissions>, AppError> {
     let user_id = auth_user.user_id_uuid()?;
-    let role = state.role_service.update_role(role_id, user_id, payload).await?;
+    let role = state
+        .role_service
+        .update_role(role_id, user_id, payload)
+        .await?;
     Ok(Json(role))
 }
 
@@ -69,7 +75,10 @@ pub async fn assign_role_to_member(
     Json(payload): Json<AssignRolePayload>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let actor = auth_user.user_id_uuid()?;
-    state.role_service.assign_role(space_id, member_user_id, payload.role_id, actor).await?;
+    state
+        .role_service
+        .assign_role(space_id, member_user_id, payload.role_id, actor)
+        .await?;
     Ok(Json(serde_json::json!({"status": "assigned"})))
 }
 
@@ -79,7 +88,10 @@ pub async fn remove_role_from_member(
     Path((space_id, member_user_id, role_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<StatusCode, AppError> {
     let actor = auth_user.user_id_uuid()?;
-    state.role_service.remove_role(space_id, member_user_id, role_id, actor).await?;
+    state
+        .role_service
+        .remove_role(space_id, member_user_id, role_id, actor)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -89,7 +101,7 @@ pub struct AssignRolePayload {
 }
 
 pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{get, post, put, delete};
+    use axum::routing::{delete, get, post, put};
 
     axum::Router::new()
         .route("/spaces/{space_id}/roles", get(list_roles))
@@ -97,6 +109,12 @@ pub fn router() -> axum::Router<AppState> {
         .route("/spaces/{space_id}/roles/{role_id}", get(get_role))
         .route("/spaces/{space_id}/roles/{role_id}", put(update_role))
         .route("/spaces/{space_id}/roles/{role_id}", delete(delete_role))
-        .route("/spaces/{space_id}/members/{user_id}/roles", post(assign_role_to_member))
-        .route("/spaces/{space_id}/members/{user_id}/roles/{role_id}", delete(remove_role_from_member))
+        .route(
+            "/spaces/{space_id}/members/{user_id}/roles",
+            post(assign_role_to_member),
+        )
+        .route(
+            "/spaces/{space_id}/members/{user_id}/roles/{role_id}",
+            delete(remove_role_from_member),
+        )
 }

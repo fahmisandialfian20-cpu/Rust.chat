@@ -1,7 +1,7 @@
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
-use uuid::Uuid;
 use time::OffsetDateTime;
-use sha2::{Sha256, Digest};
+use uuid::Uuid;
 
 use crate::domain::invite::Invite;
 use crate::error::AppError;
@@ -27,18 +27,19 @@ impl InviteRepository {
 
         let row = sqlx::query_as::<_, SqlxInvite>(
             r#"
-            INSERT INTO invites (id, code_hash, space_id, channel_id, created_by, max_uses, used_count, expires_at, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8)
+            INSERT INTO invites (id, code, code_hash, space_id, channel_id, created_by, max_uses, used_count, expires_at, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9)
             RETURNING id, code, code_hash, space_id, channel_id, created_by, max_uses, used_count, expires_at, created_at
             "#
         )
         .bind(Uuid::now_v7())
+        .bind(&code)
         .bind(Self::hash_code(&code))
-        .bind(&space_id)
-        .bind(&channel_id)
+        .bind(space_id)
+        .bind(channel_id)
         .bind(created_by)
-        .bind(&max_uses)
-        .bind(&expires_at)
+        .bind(max_uses)
+        .bind(expires_at)
         .bind(OffsetDateTime::now_utc())
         .fetch_one(&self.pool)
         .await
@@ -114,7 +115,12 @@ impl InviteRepository {
         })
     }
 
-    pub async fn find_by_space(&self, space_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Invite>, AppError> {
+    pub async fn find_by_space(
+        &self,
+        space_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Invite>, AppError> {
         let rows = sqlx::query_as::<_, SqlxInvite>(
             r#"
             SELECT id, code, code_hash, space_id, channel_id, created_by, max_uses, used_count, expires_at, created_at
@@ -131,17 +137,20 @@ impl InviteRepository {
         .await
         .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
-        Ok(rows.into_iter().map(|r| Invite {
-            id: r.id,
-            code: r.code,
-            space_id: r.space_id,
-            channel_id: r.channel_id,
-            created_by: r.created_by,
-            max_uses: r.max_uses,
-            used_count: r.used_count,
-            expires_at: r.expires_at,
-            created_at: r.created_at,
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| Invite {
+                id: r.id,
+                code: r.code,
+                space_id: r.space_id,
+                channel_id: r.channel_id,
+                created_by: r.created_by,
+                max_uses: r.max_uses,
+                used_count: r.used_count,
+                expires_at: r.expires_at,
+                created_at: r.created_at,
+            })
+            .collect())
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), AppError> {
@@ -170,7 +179,7 @@ impl InviteRepository {
 
     pub async fn is_valid(&self, code: &str) -> Result<bool, AppError> {
         let invite = self.find_by_code(code).await?;
-        
+
         if let Some(max_uses) = invite.max_uses {
             if invite.used_count >= max_uses {
                 return Ok(false);
@@ -199,6 +208,7 @@ impl InviteRepository {
 }
 
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct SqlxInvite {
     id: Uuid,
     code: String,

@@ -37,14 +37,14 @@ impl std::fmt::Display for SessionStatus {
 
 pub struct SessionManager {
     redis_client: redis::Client,
-    db_pool: sqlx::PgPool,
+    _db_pool: sqlx::PgPool,
 }
 
 impl SessionManager {
     pub fn new(redis_client: redis::Client, db_pool: sqlx::PgPool) -> Self {
         Self {
             redis_client,
-            db_pool,
+            _db_pool: db_pool,
         }
     }
 
@@ -78,7 +78,10 @@ impl SessionManager {
 
     pub async fn get_session(&self, session_id: Uuid) -> Result<Option<Session>, AppError> {
         let key = format!("session:{}", session_id);
-        let mut conn = self.redis_client.get_connection_manager().await
+        let mut conn = self
+            .redis_client
+            .get_connection_manager()
+            .await
             .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         let data: Option<Vec<u8>> = redis::cmd("GET")
@@ -100,7 +103,10 @@ impl SessionManager {
 
     pub async fn revoke_session(&self, session_id: Uuid) -> Result<(), AppError> {
         let key = format!("session:{}", session_id);
-        let mut conn = self.redis_client.get_connection_manager().await
+        let mut conn = self
+            .redis_client
+            .get_connection_manager()
+            .await
             .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         let data: Option<Vec<u8>> = redis::cmd("GET")
@@ -131,9 +137,15 @@ impl SessionManager {
         let bytes = serde_json::to_vec(session)
             .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
-        let ttl = session.expires_at.signed_duration_since(Utc::now()).num_seconds() as u64;
+        let ttl = session
+            .expires_at
+            .signed_duration_since(Utc::now())
+            .num_seconds() as u64;
 
-        let mut conn = self.redis_client.get_connection_manager().await
+        let mut conn = self
+            .redis_client
+            .get_connection_manager()
+            .await
             .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         let _: () = redis::cmd("SET")

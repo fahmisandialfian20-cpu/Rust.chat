@@ -16,3 +16,7 @@ TODO.md
 .opencode.jsonc
 *.pdb
 *.exe
+.opencode/
+.idea/
+.vscode/
+.playwright/

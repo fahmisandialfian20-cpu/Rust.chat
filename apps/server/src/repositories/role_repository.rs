@@ -1,6 +1,6 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::domain::role::Role;
 use crate::error::AppError;
@@ -25,7 +25,7 @@ impl RoleRepository {
             INSERT INTO roles (id, space_id, name, is_default, permissions, created_at, updated_at)
             VALUES ($1, $2, $3, $4, '{}', $5, $5)
             RETURNING id, space_id, name, is_default, permissions, created_at, updated_at
-            "#
+            "#,
         )
         .bind(Uuid::now_v7())
         .bind(space_id)
@@ -44,7 +44,7 @@ impl RoleRepository {
             r#"
             SELECT id, space_id, name, is_default, permissions, created_at, updated_at
             FROM roles WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .fetch_one(&self.pool)
@@ -64,7 +64,7 @@ impl RoleRepository {
             FROM roles
             WHERE space_id = $1
             ORDER BY created_at ASC
-            "#
+            "#,
         )
         .bind(space_id)
         .fetch_all(&self.pool)
@@ -74,17 +74,13 @@ impl RoleRepository {
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 
-    pub async fn update(
-        &self,
-        id: Uuid,
-        name: &str,
-    ) -> Result<Role, AppError> {
+    pub async fn update(&self, id: Uuid, name: &str) -> Result<Role, AppError> {
         let row = sqlx::query_as::<_, SqlxRole>(
             r#"
             UPDATE roles SET name = $1, updated_at = $2
             WHERE id = $3
             RETURNING id, space_id, name, is_default, permissions, created_at, updated_at
-            "#
+            "#,
         )
         .bind(name)
         .bind(OffsetDateTime::now_utc())
@@ -119,7 +115,9 @@ impl RoleRepository {
         permission_keys: &[String],
         allowed: bool,
     ) -> Result<(), AppError> {
-        let mut tx = self.pool.begin()
+        let mut tx = self
+            .pool
+            .begin()
             .await
             .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
@@ -134,7 +132,7 @@ impl RoleRepository {
                 r#"
                 INSERT INTO role_permissions (id, role_id, permission_key, allowed, created_at)
                 VALUES ($1, $2, $3, $4, $5)
-                "#
+                "#,
             )
             .bind(Uuid::now_v7())
             .bind(role_id)
@@ -163,7 +161,7 @@ impl RoleRepository {
             INSERT INTO member_roles (id, membership_id, role_id, assigned_at)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (membership_id, role_id) DO NOTHING
-            "#
+            "#,
         )
         .bind(Uuid::now_v7())
         .bind(membership_id)
@@ -181,14 +179,13 @@ impl RoleRepository {
         membership_id: Uuid,
         role_id: Uuid,
     ) -> Result<(), AppError> {
-        let result = sqlx::query(
-            "DELETE FROM member_roles WHERE membership_id = $1 AND role_id = $2"
-        )
-        .bind(membership_id)
-        .bind(role_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let result =
+            sqlx::query("DELETE FROM member_roles WHERE membership_id = $1 AND role_id = $2")
+                .bind(membership_id)
+                .bind(role_id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound("Role assignment not found".to_string()));
@@ -209,7 +206,7 @@ impl RoleRepository {
             INNER JOIN member_roles mr ON r.id = mr.role_id
             INNER JOIN space_memberships sm ON mr.membership_id = sm.id
             WHERE sm.space_id = $1 AND sm.user_id = $2
-            "#
+            "#,
         )
         .bind(space_id)
         .bind(user_id)
@@ -229,7 +226,7 @@ impl RoleRepository {
             r#"
             SELECT id FROM space_memberships
             WHERE space_id = $1 AND user_id = $2
-            "#
+            "#,
         )
         .bind(space_id)
         .bind(user_id)
@@ -248,7 +245,7 @@ impl RoleRepository {
             r#"
             SELECT permission_key FROM role_permissions
             WHERE role_id = $1 AND allowed = true
-            "#
+            "#,
         )
         .bind(role_id)
         .fetch_all(&self.pool)

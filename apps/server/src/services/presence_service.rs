@@ -1,6 +1,6 @@
+use crate::error::AppError;
 use redis::aio::ConnectionManager;
 use uuid::Uuid;
-use crate::error::AppError;
 
 const PRESENCE_TTL_SECS: u64 = 300;
 
