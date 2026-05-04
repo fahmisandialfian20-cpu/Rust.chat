@@ -1,3 +1,12 @@
+# =============================================================================
+# Rust.chat — Development Docker Compose
+# Run from repo root: docker compose -f infra/docker-compose.dev.yml up -d
+#
+# Path conventions (relative paths in this file resolve from infra/):
+#   ../<path>   → project root (e.g. ../apps/server, ../.env)
+#   ./          → this directory (infra/)
+# =============================================================================
+
 services:
   postgres:
     image: postgres:16
@@ -9,11 +18,25 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rust-chat
 
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rust-chat
 
   server:
     build:
@@ -21,22 +44,34 @@ services:
       dockerfile: Dockerfile
     env_file:
       - ../.env
+    environment:
+      # Override DATABASE_URL and REDIS_URL to use Docker service names
+      DATABASE_URL: postgres://chatapp:chatapp@postgres:5432/chatapp
+      REDIS_URL: redis://redis:6379
     ports:
       - "8080:8080"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - upload_data:/data/uploads
+    networks:
+      - rust-chat
 
-  livekit:
-    image: livekit/livekit-server:latest
-    command: --config /etc/livekit.yaml
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
+  # LiveKit (voice/video — Phase 10+, disabled by default for MVP)
+  # Uncomment and run with: docker compose -f infra/docker-compose.dev.yml up -d livekit
+  # livekit:
+  #   image: livekit/livekit-server:latest
+  #   command: --config /etc/livekit.yaml
+  #   ports:
+  #     - "7880:7880"
+  #     - "7881:7881"
+  #   volumes:
+  #     - ./livekit.yaml:/etc/livekit.yaml
+  #   networks:
+  #     - rust-chat
 
   web:
     build:
@@ -48,8 +83,15 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - server
+      server:
+        condition: service_started
+    networks:
+      - rust-chat
 
 volumes:
   pg_data:
   upload_data:
+
+networks:
+  rust-chat:
+    driver: bridge
