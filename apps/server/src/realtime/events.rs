@@ -24,6 +24,8 @@ pub enum WsEvent {
     ChannelUpdated(Channel),
     #[serde(rename = "channel.deleted")]
     ChannelDeleted(Uuid),
+    #[serde(rename = "channel.visibility_changed")]
+    ChannelVisibilityChanged(Uuid),
     #[serde(rename = "error")]
     Error(ErrorData),
 }
