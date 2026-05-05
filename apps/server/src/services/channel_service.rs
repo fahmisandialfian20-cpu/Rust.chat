@@ -66,7 +66,7 @@ impl ChannelService {
             .await?;
 
         if let Ok(json) = WsEvent::ChannelCreated(channel.clone()).to_json() {
-            self.hub.publish_to_channel(space_id, json).await;
+            self.hub.publish_to_channel(channel.id, json).await;
         }
 
         Ok(channel)
@@ -110,14 +110,19 @@ impl ChannelService {
         channel_id: Uuid,
         input: UpdateChannel,
     ) -> Result<Channel, AppError> {
-        let channel = self.repository.find_by_id(channel_id).await?;
-        let space_id = channel.space_id;
+        let _ = self.repository.find_by_id(channel_id).await?;
+        let visibility_changed = input.visibility.is_some();
         let updated = self
             .repository
             .update(channel_id, input.name, input.topic, input.visibility)
             .await?;
         if let Ok(json) = WsEvent::ChannelUpdated(updated.clone()).to_json() {
-            self.hub.publish_to_channel(space_id, json).await;
+            self.hub.publish_to_channel(updated.id, json).await;
+        }
+        if visibility_changed {
+            if let Ok(json) = WsEvent::ChannelVisibilityChanged(updated.id).to_json() {
+                self.hub.publish_to_channel(updated.id, json).await;
+            }
         }
         Ok(updated)
     }
@@ -127,11 +132,10 @@ impl ChannelService {
     }
 
     pub async fn delete_channel(&self, channel_id: Uuid) -> Result<(), AppError> {
-        let channel = self.repository.find_by_id(channel_id).await?;
-        let space_id = channel.space_id;
+        self.repository.find_by_id(channel_id).await?;
         self.repository.delete(channel_id).await?;
         if let Ok(json) = WsEvent::ChannelDeleted(channel_id).to_json() {
-            self.hub.publish_to_channel(space_id, json).await;
+            self.hub.publish_to_channel(channel_id, json).await;
         }
         Ok(())
     }
