@@ -156,7 +156,8 @@ impl ChannelService {
         channel_id: Uuid,
         input: ChannelFeatureFlagsUpdate,
     ) -> Result<ChannelFeatureFlags, AppError> {
-        self.repository
+        let flags = self
+            .repository
             .update_feature_flags(
                 channel_id,
                 input.text_enabled,
@@ -166,7 +167,14 @@ impl ChannelService {
                 input.threads_enabled,
                 input.reactions_enabled,
             )
-            .await
+            .await?;
+
+        let channel = self.repository.find_by_id(channel_id).await?;
+        if let Ok(json) = WsEvent::ChannelUpdated(channel).to_json() {
+            self.hub.publish_to_channel(channel_id, json).await;
+        }
+
+        Ok(flags)
     }
 
     pub async fn add_member(&self, channel_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
