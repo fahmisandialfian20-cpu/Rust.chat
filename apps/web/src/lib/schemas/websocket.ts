@@ -22,6 +22,7 @@ export const WS_EVENT_TYPES = [
   'channel.created',
   'channel.updated',
   'channel.deleted',
+  'channel.visibility_changed',
   'permission.updated',
   'member.joined',
   'member.left',
@@ -108,6 +109,11 @@ export const channelDeletedPayloadSchema = z.object({
 });
 export type ChannelDeletedPayload = z.infer<typeof channelDeletedPayloadSchema>;
 
+export const channelVisibilityChangedPayloadSchema = z.object({
+  channel_id: z.string().min(1),
+});
+export type ChannelVisibilityChangedPayload = z.infer<typeof channelVisibilityChangedPayloadSchema>;
+
 type EventPayloadMap = {
   'hello.ok': HelloOkPayload;
   'message.created': z.infer<typeof MessageSchema>;
@@ -118,6 +124,7 @@ type EventPayloadMap = {
   'channel.created': z.infer<typeof ChannelSchema>;
   'channel.updated': z.infer<typeof ChannelSchema>;
   'channel.deleted': ChannelDeletedPayload;
+  'channel.visibility_changed': ChannelVisibilityChangedPayload;
   'permission.updated': PermissionUpdatedPayload;
   'member.joined': MemberJoinedPayload;
   'member.left': MemberLeftPayload;
@@ -161,6 +168,7 @@ const payloadSchemaByType: Record<string, z.ZodType<unknown>> = {
   'channel.created': ChannelSchema,
   'channel.updated': ChannelSchema,
   'channel.deleted': channelDeletedPayloadSchema,
+  'channel.visibility_changed': channelVisibilityChangedPayloadSchema,
   'permission.updated': permissionUpdatedPayloadSchema,
   'member.joined': memberJoinedPayloadSchema,
   'member.left': memberLeftPayloadSchema,

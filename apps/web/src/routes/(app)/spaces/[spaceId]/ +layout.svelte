@@ -53,10 +53,15 @@
       channels = channels.filter(c => c.id !== p.channel_id);
     });
 
+    const unsubVisibilityChanged = realtime.subscribe('channel.visibility_changed', () => {
+      listVisibleChannels(spaceId).then(result => channels = result);
+    });
+
     return () => {
       unsubCreated();
       unsubUpdated();
       unsubDeleted();
+      unsubVisibilityChanged();
     };
   });
 
