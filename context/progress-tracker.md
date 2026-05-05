@@ -6,8 +6,8 @@ Current phase: `MVP Core Stabilization`
 
 Last updated: 2026-05-05
 Session completed: Phase 1 + Phase 2 + Bug Fixes + Phase 3 Implementation
-Current task: Phase 3 Critical Fixes ✅
-Next: Frontend integration (channel visibility, WS events, E2E)
+Current task: Phase 3 Critical Fixes ✅ DONE + Frontend Channel Visibility 🟡 STARTED
+Next: Complete frontend channel visibility (WS events, permission-based UI)
 
 ---
 
@@ -128,21 +128,32 @@ Phase 3 security hardening completed. All critical gaps fixed.
 | Invite consumption | HIGH | Race condition allows exceeding `max_uses` | ✅ Fixed |
 | WebSocket gateway | HIGH | Broadcasts all events globally without permission checks | ✅ Fixed |
 | WebSocket inbound | HIGH | Deserializes trusted `WsEvent` instead of parsing client commands | ✅ Fixed |
+| `delete_invite` auth | CRITICAL | No authorization check — any user can delete any invite | ✅ Fixed |
+| `consume_invite` race | CRITICAL | Non-atomic validate-then-increment exceeds max_uses | ✅ Fixed |
+| WS `LeaveChannel` | HIGH | No-op causes memory leak from orphaned forward tasks | ✅ Fixed |
+| WS duplicate join | HIGH | Calling JoinChannel twice spawns duplicate subscriptions | ✅ Fixed |
+| `WsEvent::to_json()` | HIGH | `.unwrap()` panics on serialization failure | ✅ Fixed |
 
 Full audit reports in `context/tasks/phase3-research/`.
 Task context in `context/tasks/phase3-e2e-security-hardening.md`.
+Critical fixes task: `context/tasks/phase3-critical-fixes.md`.
 
 ---
 
 ## What's Next
 
-Backend security is now stable. Ready for frontend integration:
+Backend security is now stable. Remaining tasks to complete MVP Core:
 
-1. **Frontend Channel Visibility** — only show authorized channels
-2. **Frontend Permission Integration** — disable UI actions based on permissions
-3. **WebSocket Event Handling** — connect frontend to WS gateway
-4. **E2E Testing** — full user journey tests
-4. **Frontend Channel Visibility** — only show authorized channels (after backend is secure)
+| # | Task | Status | Context File |
+|---|------|--------|-------------|
+| 1 | **Complete Frontend Channel Visibility** | 🟡 IN PROGRESS | `frontend-channel-visibility-complete.md` |
+| 2 | **Frontend Permission Integration** | 🔴 Ready | `frontend-permission-integration.md` |
+| 3 | **Backend Channel Event Broadcasting** | 🔴 Ready | `backend-channel-event-broadcasting.md` |
+| 4 | **E2E User Journey Test** | 🔴 Ready | `e2e-user-journey-test.md` |
+
+**Completion order:** 1 → 2 → 3 → 4
+
+**Estimates:** 1 session each (4 sessions total to MVP Core Complete)
 
 ---
 
@@ -215,11 +226,39 @@ Do not track here unless a task explicitly asks:
 - **Issue D:** Duplicate `JoinChannel` — uses `HashMap::entry().Vacant` to prevent duplicate subscriptions
 - **Issue E:** `WsEvent::to_json()` — returns `Result` instead of panicking; all 8 callers handle errors gracefully
 
+### Phase 3 Critical Fixes ✅
+- **Issue A:** `delete_invite` — added `ManageInvites` permission check
+- **Issue B:** `consume_invite` — replaced with atomic `try_consume`
+- **Issue C:** `LeaveChannel` — aborts forward task, prevents memory leak
+- **Issue D:** Duplicate `JoinChannel` — prevented via `HashMap` tracking
+- **Issue E:** `WsEvent::to_json()` — returns `Result`, no panic
+- **Added:** `GET /api/v1/spaces/{id}/my-permissions` handler
+
+### Frontend Channel Visibility 🟡 STARTED
+- `getMyPermissions()` API client added
+- Realtime WebSocket connection in space layout
+- `channel.created` event subscription for live updates
+- Retry logic with exponential backoff
+
+### Gap Analysis ✅
+- Cross-checked MVP success criteria (10 items) against actual status
+- Identified 4 remaining tasks to complete MVP Core
+- Created 4 task contexts with clear scope and acceptance criteria
+- Estimated 4 sessions total to MVP Core Complete
+
+### New Task Contexts Created
+1. `frontend-channel-visibility-complete.md` — Real-time sync for all channel events
+2. `frontend-permission-integration.md` — Disable UI actions based on permissions
+3. `backend-channel-event-broadcasting.md` — Emit WS events on channel mutations
+4. `e2e-user-journey-test.md` — Full flow testing from bootstrap to message
+5. `gap-analysis-mvp-completion.md` — Master analysis document
+
 ### Verification Evidence
 ```bash
 cargo test -- --test-threads=1     # test result: ok. 40 passed; 0 failed
 cargo clippy -- -D warnings        # Finished dev profile (0 errors)
 cargo fmt --check                  # (no output = clean)
+npm run check                      # svelte-check: 0 errors, 0 warnings
 ```
 
-**Latest commit:** `1b6ef0a` — `local-work` branch
+**Latest commit:** `55311fe` — `local-work` branch
