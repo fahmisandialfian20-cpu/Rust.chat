@@ -1,6 +1,6 @@
-use crate::error::AppError;
 use super::keys::PermissionKey;
-use super::repository::{PermissionRepository, ChannelFeatureFlags};
+use super::repository::PermissionRepository;
+use crate::error::AppError;
 
 #[derive(Clone)]
 pub struct PermissionResolver {
@@ -45,14 +45,22 @@ impl PermissionResolver {
 
         let role_ids = self.repo.get_role_ids_for_user(space_id, user_id).await?;
 
-        let role_allowed = self.check_layer3_role_permissions(&role_ids, perm_key).await?;
+        let role_allowed = self
+            .check_layer3_role_permissions(&role_ids, perm_key)
+            .await?;
 
         if let Some(channel_id) = channel_id {
-            if let Some(result) = self.check_layer4_channel_override(&role_ids, channel_id, perm_key).await? {
+            if let Some(result) = self
+                .check_layer4_channel_override(&role_ids, channel_id, perm_key)
+                .await?
+            {
                 return Ok(result);
             }
 
-            if let Some(result) = self.check_layer5_feature_flags(channel_id, permission).await? {
+            if let Some(result) = self
+                .check_layer5_feature_flags(channel_id, permission)
+                .await?
+            {
                 return Ok(result);
             }
         }
@@ -64,7 +72,9 @@ impl PermissionResolver {
                 if role_ids.is_empty() {
                     Ok(PermissionResult::Denied("No roles assigned".to_string()))
                 } else {
-                    Ok(PermissionResult::Denied("Permission not granted by any role".to_string()))
+                    Ok(PermissionResult::Denied(
+                        "Permission not granted by any role".to_string(),
+                    ))
                 }
             }
         }
@@ -94,7 +104,9 @@ impl PermissionResolver {
         let is_member = self.repo.is_space_member(space_id, user_id).await?;
 
         if !is_member {
-            return Ok(Some(PermissionResult::Denied("Not a member of this space".to_string())));
+            return Ok(Some(PermissionResult::Denied(
+                "Not a member of this space".to_string(),
+            )));
         }
 
         Ok(None)
@@ -108,19 +120,24 @@ impl PermissionResolver {
         let role_permissions = self.repo.get_role_permissions(role_ids).await?;
 
         if role_permissions.is_empty() {
-            return Ok(Some(PermissionResult::Denied("No roles assigned".to_string())));
+            return Ok(Some(PermissionResult::Denied(
+                "No roles assigned".to_string(),
+            )));
         }
 
         for rp in &role_permissions {
-            if rp.permission_key == permission {
-                if rp.allowed {
-                    return Ok(Some(PermissionResult::Allowed));
-                }
+            if rp.permission_key == permission && rp.allowed {
+                return Ok(Some(PermissionResult::Allowed));
             }
         }
 
-        if role_permissions.iter().any(|rp| rp.permission_key == permission) {
-            Ok(Some(PermissionResult::Denied("Permission explicitly denied by role".to_string())))
+        if role_permissions
+            .iter()
+            .any(|rp| rp.permission_key == permission)
+        {
+            Ok(Some(PermissionResult::Denied(
+                "Permission explicitly denied by role".to_string(),
+            )))
         } else {
             Ok(None)
         }
@@ -132,12 +149,17 @@ impl PermissionResolver {
         channel_id: Uuid,
         permission: &str,
     ) -> Result<Option<PermissionResult>, AppError> {
-        let overrides = self.repo.get_channel_overrides(channel_id, role_ids).await?;
+        let overrides = self
+            .repo
+            .get_channel_overrides(channel_id, role_ids)
+            .await?;
 
         for ov in overrides {
             if ov.permission_key == permission {
                 if ov.denied {
-                    return Ok(Some(PermissionResult::Denied("Permission denied by channel override".to_string())));
+                    return Ok(Some(PermissionResult::Denied(
+                        "Permission denied by channel override".to_string(),
+                    )));
                 } else {
                     return Ok(Some(PermissionResult::Allowed));
                 }
@@ -155,9 +177,12 @@ impl PermissionResolver {
         let flags = self.repo.get_channel_feature_flags(channel_id).await?;
 
         let allowed = match permission {
+            PermissionKey::SendMessages => flags.text_enabled,
             PermissionKey::SendFiles => flags.send_file_enabled,
             PermissionKey::JoinVoice | PermissionKey::StartVoice => flags.voice_group_enabled,
-            PermissionKey::JoinVideo | PermissionKey::StartVideo | PermissionKey::ShareScreen => flags.video_group_enabled,
+            PermissionKey::JoinVideo | PermissionKey::StartVideo | PermissionKey::ShareScreen => {
+                flags.video_group_enabled
+            }
             _ => true,
         };
 

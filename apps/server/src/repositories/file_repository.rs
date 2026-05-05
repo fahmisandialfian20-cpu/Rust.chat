@@ -1,6 +1,6 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::domain::file_object::FileObject;
 use crate::error::AppError;
@@ -15,6 +15,7 @@ impl FileRepository {
         Self { pool }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         &self,
         space_id: Option<Uuid>,
@@ -33,8 +34,8 @@ impl FileRepository {
             "#
         )
         .bind(Uuid::now_v7())
-        .bind(&space_id)
-        .bind(&channel_id)
+        .bind(space_id)
+        .bind(channel_id)
         .bind(uploader_user_id)
         .bind(&filename)
         .bind(&content_type)

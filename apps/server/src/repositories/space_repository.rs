@@ -1,9 +1,9 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
-use crate::domain::space::{Space, SpaceVisibility};
 use crate::domain::membership::SpaceMembership;
+use crate::domain::space::{Space, SpaceVisibility};
 use crate::error::AppError;
 
 pub struct SpaceRepository {
@@ -98,7 +98,12 @@ impl SpaceRepository {
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 
-    pub async fn find_by_user(&self, user_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Space>, AppError> {
+    pub async fn find_by_user(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Space>, AppError> {
         let rows = sqlx::query_as::<_, SqlxSpace>(
             r#"
             SELECT s.id, s.name, s.slug, s.description, s.icon_object_id, s.created_by, s.visibility, s.settings, s.created_at, s.updated_at
@@ -221,12 +226,13 @@ impl SpaceRepository {
     }
 
     pub async fn remove_member(&self, space_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
-        let result = sqlx::query("DELETE FROM space_memberships WHERE space_id = $1 AND user_id = $2")
-            .bind(space_id)
-            .bind(user_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let result =
+            sqlx::query("DELETE FROM space_memberships WHERE space_id = $1 AND user_id = $2")
+                .bind(space_id)
+                .bind(user_id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound("Membership not found".to_string()));
@@ -235,7 +241,12 @@ impl SpaceRepository {
         Ok(())
     }
 
-    pub async fn get_members(&self, space_id: Uuid, limit: i64, offset: i64) -> Result<Vec<SpaceMembership>, AppError> {
+    pub async fn get_members(
+        &self,
+        space_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<SpaceMembership>, AppError> {
         let rows = sqlx::query_as::<_, SqlxMembership>(
             r#"
             SELECT id, space_id, user_id, nickname, settings, created_at, updated_at
@@ -243,7 +254,7 @@ impl SpaceRepository {
             WHERE space_id = $1
             ORDER BY created_at ASC
             LIMIT $2 OFFSET $3
-            "#
+            "#,
         )
         .bind(space_id)
         .bind(limit)
@@ -255,13 +266,17 @@ impl SpaceRepository {
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 
-    pub async fn get_member(&self, space_id: Uuid, user_id: Uuid) -> Result<SpaceMembership, AppError> {
+    pub async fn get_member(
+        &self,
+        space_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<SpaceMembership, AppError> {
         let row = sqlx::query_as::<_, SqlxMembership>(
             r#"
             SELECT id, space_id, user_id, nickname, settings, created_at, updated_at
             FROM space_memberships
             WHERE space_id = $1 AND user_id = $2
-            "#
+            "#,
         )
         .bind(space_id)
         .bind(user_id)
@@ -279,7 +294,7 @@ impl SpaceRepository {
         let result = sqlx::query_scalar::<_, bool>(
             r#"
             SELECT EXISTS(SELECT 1 FROM space_memberships WHERE space_id = $1 AND user_id = $2)
-            "#
+            "#,
         )
         .bind(space_id)
         .bind(user_id)
@@ -291,13 +306,12 @@ impl SpaceRepository {
     }
 
     pub async fn slug_exists(&self, slug: &str) -> Result<bool, AppError> {
-        let result = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM spaces WHERE slug = $1)"
-        )
-        .bind(slug)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let result =
+            sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM spaces WHERE slug = $1)")
+                .bind(slug)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         Ok(result)
     }

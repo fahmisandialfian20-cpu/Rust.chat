@@ -10,22 +10,22 @@ use thiserror::Error;
 pub enum AppError {
     #[error("Not found: {0}")]
     NotFound(String),
-    
+
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
-    
+
     #[error("Bad request: {0}")]
     BadRequest(String),
-    
+
     #[error("Conflict: {0}")]
     Conflict(String),
-    
+
     #[error("Forbidden: {0}")]
     Forbidden(String),
-    
+
     #[error("Internal server error: {0}")]
     InternalServerError(String),
-    
+
     #[error("Service unavailable: {0}")]
     ServiceUnavailable(String),
 

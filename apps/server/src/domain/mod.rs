@@ -1,9 +1,9 @@
-pub mod user;
-pub mod space;
-pub mod membership;
-pub mod channel;
-pub mod invite;
-pub mod message;
-pub mod file_object;
 pub mod audit;
+pub mod channel;
+pub mod file_object;
+pub mod invite;
+pub mod membership;
+pub mod message;
 pub mod role;
+pub mod space;
+pub mod user;

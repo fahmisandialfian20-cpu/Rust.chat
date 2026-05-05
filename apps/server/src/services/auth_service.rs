@@ -1,12 +1,12 @@
 use std::sync::Arc;
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::auth::jwt::JwtManager;
 use crate::auth::password::{hash_password, verify_password};
 use crate::auth::session::SessionManager;
 use crate::config::AppConfig;
-use crate::domain::user::{User, ClientInfo, ClientDevice};
+use crate::domain::user::{ClientDevice, ClientInfo, User};
 use crate::error::AppError;
 use crate::repositories::user_repository::UserRepository;
 
@@ -44,12 +44,11 @@ impl AuthService {
         username: String,
         password: String,
     ) -> Result<AuthResponse, AppError> {
-        let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM instance_settings)",
-        )
-        .fetch_one(self.user_repo.pool())
-        .await
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let exists =
+            sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM instance_settings)")
+                .fetch_one(self.user_repo.pool())
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         if exists {
             return Err(AppError::Conflict(
@@ -71,10 +70,7 @@ impl AuthService {
 
         let password_hash = hash_password(&password, &self.config.auth.password_pepper)?;
 
-        let user = self
-            .user_repo
-            .create(username, None, password_hash)
-            .await?;
+        let user = self.user_repo.create(username, None, password_hash).await?;
 
         sqlx::query(
             r#"
@@ -113,22 +109,13 @@ impl AuthService {
             ));
         }
 
-        if self
-            .user_repo
-            .check_username_exists(&username)
-            .await?
-        {
-            return Err(AppError::Conflict(
-                "Username already taken".to_string(),
-            ));
+        if self.user_repo.check_username_exists(&username).await? {
+            return Err(AppError::Conflict("Username already taken".to_string()));
         }
 
         let password_hash = hash_password(&password, &self.config.auth.password_pepper)?;
 
-        let user = self
-            .user_repo
-            .create(username, None, password_hash)
-            .await?;
+        let user = self.user_repo.create(username, None, password_hash).await?;
 
         self.create_auth_response(user).await
     }
@@ -145,11 +132,8 @@ impl AuthService {
             .await?;
 
         let password_hash = user.password_hash.as_deref().unwrap_or("");
-        let valid = verify_password(
-            &password,
-            &self.config.auth.password_pepper,
-            password_hash,
-        )?;
+        let valid = verify_password(&password, &self.config.auth.password_pepper, password_hash)
+            .unwrap_or_default();
 
         if !valid {
             return Err(AppError::Unauthorized("Invalid password".to_string()));
@@ -198,11 +182,7 @@ impl AuthService {
         })
     }
 
-    pub async fn logout(
-        &self,
-        _user_id: Uuid,
-        session_id: Uuid,
-    ) -> Result<(), AppError> {
+    pub async fn logout(&self, _user_id: Uuid, session_id: Uuid) -> Result<(), AppError> {
         self.session_manager.revoke_session(session_id).await
     }
 
@@ -215,11 +195,7 @@ impl AuthService {
         self.user_repo.list_devices(user_id).await
     }
 
-    pub async fn revoke_device(
-        &self,
-        device_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<(), AppError> {
+    pub async fn revoke_device(&self, device_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
         self.user_repo.delete_device(device_id, user_id).await
     }
 

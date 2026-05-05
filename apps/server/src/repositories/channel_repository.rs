@@ -1,8 +1,8 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
-use crate::domain::channel::{Channel, ChannelKind, ChannelVisibility, ChannelFeatureFlags};
+use crate::domain::channel::{Channel, ChannelFeatureFlags, ChannelKind, ChannelVisibility};
 use crate::error::AppError;
 
 pub struct ChannelRepository {
@@ -14,6 +14,7 @@ impl ChannelRepository {
         Self { pool }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         &self,
         space_id: Uuid,
@@ -35,7 +36,7 @@ impl ChannelRepository {
         )
         .bind(Uuid::now_v7())
         .bind(space_id)
-        .bind(&parent_id)
+        .bind(parent_id)
         .bind(&name)
         .bind(&slug)
         .bind(kind.to_string())
@@ -102,7 +103,12 @@ impl ChannelRepository {
         Ok(row.into())
     }
 
-    pub async fn find_by_space(&self, space_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Channel>, AppError> {
+    pub async fn find_by_space(
+        &self,
+        space_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Channel>, AppError> {
         let rows = sqlx::query_as::<_, SqlxChannel>(
             r#"
             SELECT id, space_id, parent_id, name, slug, kind, visibility, position, topic, created_by, archived_at, created_at, updated_at
@@ -214,20 +220,20 @@ impl ChannelRepository {
         Ok(row.into())
     }
 
-    pub async fn archive(&self, id: Uuid) -> Result<(), AppError> {
-        let _row = sqlx::query(
-            "UPDATE channels SET archived_at = $1 WHERE id = $2"
+    pub async fn archive(&self, id: Uuid) -> Result<Channel, AppError> {
+        let row = sqlx::query_as::<_, SqlxChannel>(
+            "UPDATE channels SET archived_at = $1 WHERE id = $2 RETURNING id, space_id, parent_id, name, slug, kind, visibility, position, topic, created_by, archived_at, created_at, updated_at",
         )
         .bind(OffsetDateTime::now_utc())
         .bind(id)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => AppError::NotFound("Channel not found".to_string()),
             _ => AppError::InternalServerError(e.to_string()),
         })?;
 
-        Ok(())
+        Ok(row.into())
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), AppError> {
@@ -246,7 +252,7 @@ impl ChannelRepository {
 
     pub async fn slug_exists(&self, space_id: Uuid, slug: &str) -> Result<bool, AppError> {
         let result = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM channels WHERE space_id = $1 AND slug = $2)"
+            "SELECT EXISTS(SELECT 1 FROM channels WHERE space_id = $1 AND slug = $2)",
         )
         .bind(space_id)
         .bind(slug)
@@ -257,14 +263,18 @@ impl ChannelRepository {
         Ok(result)
     }
 
-    pub async fn get_next_position(&self, space_id: Uuid, parent_id: Option<Uuid>) -> Result<i32, AppError> {
+    pub async fn get_next_position(
+        &self,
+        space_id: Uuid,
+        parent_id: Option<Uuid>,
+    ) -> Result<i32, AppError> {
         let result = sqlx::query_scalar::<_, Option<i32>>(
             r#"
             SELECT MAX(position) FROM channels WHERE space_id = $1 AND parent_id IS NOT DISTINCT FROM $2
             "#
         )
         .bind(space_id)
-        .bind(&parent_id)
+        .bind(parent_id)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| AppError::InternalServerError(e.to_string()))?;
@@ -272,17 +282,13 @@ impl ChannelRepository {
         Ok(result.unwrap_or(0) + 1)
     }
 
-    pub async fn add_member(
-        &self,
-        channel_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<(), AppError> {
+    pub async fn add_member(&self, channel_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
         sqlx::query(
             r#"
             INSERT INTO channel_memberships (id, channel_id, user_id, created_at)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (channel_id, user_id) DO NOTHING
-            "#
+            "#,
         )
         .bind(Uuid::now_v7())
         .bind(channel_id)
@@ -296,12 +302,13 @@ impl ChannelRepository {
     }
 
     pub async fn remove_member(&self, channel_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
-        let result = sqlx::query("DELETE FROM channel_memberships WHERE channel_id = $1 AND user_id = $2")
-            .bind(channel_id)
-            .bind(user_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let result =
+            sqlx::query("DELETE FROM channel_memberships WHERE channel_id = $1 AND user_id = $2")
+                .bind(channel_id)
+                .bind(user_id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound("Membership not found".to_string()));
@@ -310,7 +317,10 @@ impl ChannelRepository {
         Ok(())
     }
 
-    pub async fn get_feature_flags(&self, channel_id: Uuid) -> Result<ChannelFeatureFlags, AppError> {
+    pub async fn get_feature_flags(
+        &self,
+        channel_id: Uuid,
+    ) -> Result<ChannelFeatureFlags, AppError> {
         let row = sqlx::query_as::<_, SqlxChannelFeatureFlags>(
             r#"
             SELECT id, channel_id, text_enabled, file_upload_enabled, voice_group_enabled, video_group_enabled, threads_enabled, reactions_enabled
@@ -325,6 +335,7 @@ impl ChannelRepository {
         Ok(row.into())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_feature_flags(
         &self,
         channel_id: Uuid,

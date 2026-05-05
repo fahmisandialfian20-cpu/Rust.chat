@@ -1,6 +1,6 @@
+use crate::error::AppError;
 use redis::aio::ConnectionManager;
 use uuid::Uuid;
-use crate::error::AppError;
 
 const TYPING_TTL_SECS: u64 = 5;
 
@@ -64,7 +64,7 @@ impl TypingService {
 
         let mut user_ids = Vec::new();
         for key in keys {
-            if let Some(user_id_str) = key.split(':').last() {
+            if let Some(user_id_str) = key.split(':').next_back() {
                 if let Ok(user_id) = user_id_str.parse::<Uuid>() {
                     user_ids.push(user_id);
                 }

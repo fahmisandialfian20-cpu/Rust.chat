@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { Hash, LoaderCircle, AlertCircle } from 'lucide-svelte';
-  import { getChannel, getChannelFlags } from '$lib/api/channels';
+  import { getChannel, getChannelFlags, getMyPermissions } from '$lib/api/channels';
   import { listMessages, sendMessage } from '$lib/api/messages';
   import { getAccessToken, getUser } from '$lib/stores/auth.svelte';
   import { realtime } from '$lib/stores/realtime';
@@ -26,11 +26,13 @@
   let errorMessage = $state('');
   let hasMore = $state(true);
   let loadingMore = $state(false);
+  let permissions: string[] = $state([]);
 
   let spaceId = $derived(page.params.spaceId as string);
   let channelId = $derived(page.params.channelId as string);
 
   let currentUserId = $derived((getUser() as { id: string } | null)?.id ?? '');
+  let canSendMessages = $derived(permissions.includes('send_messages'));
 
   let composerDisabled = $derived.by(() => {
     if (viewState !== 'loaded') return true;
@@ -38,12 +40,14 @@
     if (!flags.text_enabled) return true;
     if (channelKind !== 'Text') return true;
     if (sending) return true;
+    if (!canSendMessages) return true;
     return false;
   });
   let composerDisabledReason = $derived.by(() => {
     if (viewState !== 'loaded') return 'Loading channel...';
     if (channelKind !== 'Text') return 'This channel does not support text messages.';
     if (flags && !flags.text_enabled) return 'Text messages are disabled in this channel.';
+    if (!canSendMessages) return 'You do not have permission to send messages.';
     return '';
   });
 
@@ -91,6 +95,8 @@
       flags = flagsResult;
       messages = messagesResult.reverse();
       hasMore = messagesResult.length >= 50;
+      const perms = await getMyPermissions(spaceId).catch(() => []);
+      permissions = perms;
       viewState = 'loaded';
     } catch (err: unknown) {
       const e = err as { status?: number; message?: string };
@@ -215,6 +221,9 @@
       loading={false}
       {hasMore}
       {loadingMore}
+      readOnly={!canSendMessages}
+      {permissions}
+      {currentUserId}
       onloadMore={loadMore}
     />
     <TypingIndicator {channelId} currentUserId={currentUserId} />

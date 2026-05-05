@@ -1,7 +1,7 @@
 pub mod events;
-pub mod hub;
 pub mod gateway;
+pub mod hub;
 
 pub use events::*;
-pub use hub::RealtimeHub;
 pub use gateway::ws_upgrade;
+pub use hub::RealtimeHub;

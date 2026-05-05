@@ -1,13 +1,13 @@
 use axum::{
-    extract::{Path, State, Query},
+    extract::{Path, Query, State},
     response::Json,
 };
 use serde::Deserialize;
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
-use crate::domain::message::{Message, CreateMessage, UpdateMessage};
+use crate::domain::message::{CreateMessage, Message, UpdateMessage};
 use crate::error::AppError;
 use crate::middleware::rate_limit;
 use crate::state::AppState;
@@ -19,7 +19,9 @@ pub struct ListQuery {
     before: Option<Uuid>,
 }
 
-fn default_limit() -> i64 { 50 }
+fn default_limit() -> i64 {
+    50
+}
 
 #[utoipa::path(
     post,
@@ -70,9 +72,14 @@ pub async fn create_message(
 )]
 pub async fn get_message(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path((_channel_id, message_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Message>, AppError> {
-    let message = state.message_service.get_message(message_id).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    let message = state
+        .message_service
+        .get_message(message_id, user_id)
+        .await?;
     Ok(Json(message))
 }
 
@@ -91,10 +98,15 @@ pub async fn get_message(
 )]
 pub async fn list_messages(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path(channel_id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Message>>, AppError> {
-    let messages = state.message_service.list_channel_messages(channel_id, query.limit, query.before).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    let messages = state
+        .message_service
+        .list_channel_messages(channel_id, user_id, query.limit, query.before)
+        .await?;
     Ok(Json(messages))
 }
 
@@ -114,10 +126,15 @@ pub async fn list_messages(
 )]
 pub async fn update_message(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path((_channel_id, message_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<UpdateMessage>,
 ) -> Result<Json<Message>, AppError> {
-    let message = state.message_service.update_message(message_id, Uuid::nil(), payload).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    let message = state
+        .message_service
+        .update_message(message_id, user_id, payload)
+        .await?;
     Ok(Json(message))
 }
 
@@ -136,19 +153,33 @@ pub async fn update_message(
 )]
 pub async fn delete_message(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path((_channel_id, message_id)): Path<(Uuid, Uuid)>,
 ) -> Result<axum::http::StatusCode, AppError> {
-    state.message_service.delete_message(message_id, Uuid::nil()).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    state
+        .message_service
+        .delete_message(message_id, user_id)
+        .await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{get, post, put, delete};
+    use axum::routing::{delete, get, post, put};
 
     axum::Router::new()
         .route("/channels/{channel_id}/messages", post(create_message))
         .route("/channels/{channel_id}/messages", get(list_messages))
-        .route("/channels/{channel_id}/messages/{message_id}", get(get_message))
-        .route("/channels/{channel_id}/messages/{message_id}", put(update_message))
-        .route("/channels/{channel_id}/messages/{message_id}", delete(delete_message))
+        .route(
+            "/channels/{channel_id}/messages/{message_id}",
+            get(get_message),
+        )
+        .route(
+            "/channels/{channel_id}/messages/{message_id}",
+            put(update_message),
+        )
+        .route(
+            "/channels/{channel_id}/messages/{message_id}",
+            delete(delete_message),
+        )
 }

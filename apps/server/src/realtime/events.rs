@@ -1,6 +1,7 @@
+use crate::domain::channel::Channel;
+use crate::domain::message::Message;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::domain::message::Message;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", content = "data")]
@@ -17,6 +18,14 @@ pub enum WsEvent {
     TypingUpdated(TypingData),
     #[serde(rename = "presence.updated")]
     PresenceUpdated(PresenceData),
+    #[serde(rename = "channel.created")]
+    ChannelCreated(Channel),
+    #[serde(rename = "channel.updated")]
+    ChannelUpdated(Channel),
+    #[serde(rename = "channel.deleted")]
+    ChannelDeleted(Uuid),
+    #[serde(rename = "channel.visibility_changed")]
+    ChannelVisibilityChanged(Uuid),
     #[serde(rename = "error")]
     Error(ErrorData),
 }
@@ -63,7 +72,7 @@ pub struct ErrorData {
 }
 
 impl WsEvent {
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap()
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
     }
 }

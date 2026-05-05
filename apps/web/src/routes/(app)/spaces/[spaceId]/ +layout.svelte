@@ -3,8 +3,9 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { LoaderCircle, AlertCircle, Hash } from 'lucide-svelte';
-  import { listVisibleChannels } from '$lib/api/channels';
+  import { listVisibleChannels, getMyPermissions } from '$lib/api/channels';
   import { getSpace } from '$lib/api/spaces';
+  import { realtime } from '$lib/stores/realtime';
   import ChannelList from '$lib/components/channels/ChannelList.svelte';
   import type { Channel } from '$lib/schemas/channels';
   import { getAccessToken } from '$lib/stores/auth.svelte';
@@ -16,7 +17,10 @@
   let viewState: LoadState = $state('loading');
   let channels: Channel[] = $state([]);
   let spaceName = $state('');
+  let permissions: string[] = $state([]);
   let errorMessage = $state('');
+  let retryCount = $state(0);
+  const MAX_RETRIES = 3;
 
   let spaceId = $derived(page.params.spaceId as string);
 
@@ -26,36 +30,86 @@
       goto('/login');
       return;
     }
+
+    realtime.connect(token);
     load();
+
+    const unsubCreated = realtime.subscribe('channel.created', (payload) => {
+      const ch = payload as Channel;
+      if (ch.space_id === spaceId) {
+        channels = [...channels, ch];
+      }
+    });
+
+    const unsubUpdated = realtime.subscribe('channel.updated', (payload) => {
+      const ch = payload as Channel;
+      if (ch.space_id === spaceId) {
+        channels = channels.map(c => c.id === ch.id ? ch : c);
+      }
+    });
+
+    const unsubDeleted = realtime.subscribe('channel.deleted', (payload) => {
+      const p = payload as { channel_id: string };
+      channels = channels.filter(c => c.id !== p.channel_id);
+    });
+
+    const unsubVisibilityChanged = realtime.subscribe('channel.visibility_changed', () => {
+      listVisibleChannels(spaceId).then(result => channels = result);
+    });
+
+    return () => {
+      unsubCreated();
+      unsubUpdated();
+      unsubDeleted();
+      unsubVisibilityChanged();
+    };
   });
 
   async function load() {
     viewState = 'loading';
-    try {
-      const [channelResult, spaceResult] = await Promise.all([
-        listVisibleChannels(spaceId),
-        getSpace(spaceId).catch(() => null),
-      ]);
-      channels = channelResult;
-      spaceName = spaceResult?.name ?? 'Channels';
-      viewState = 'loaded';
-    } catch (err: unknown) {
-      const e = err as { status?: number; message?: string };
-      if (e.status === 401) {
-        goto('/login');
+    retryCount = 0;
+    await attemptLoad();
+  }
+
+  async function attemptLoad(): Promise<void> {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const [channelResult, spaceResult] = await Promise.all([
+          listVisibleChannels(spaceId),
+          getSpace(spaceId).catch(() => null),
+        ]);
+        channels = channelResult;
+        spaceName = spaceResult?.name ?? 'Channels';
+
+        const perms = await getMyPermissions(spaceId).catch(() => []);
+        permissions = perms;
+
+        viewState = 'loaded';
         return;
+      } catch (err: unknown) {
+        const e = err as { status?: number; message?: string };
+        if (e.status === 401) {
+          goto('/login');
+          return;
+        }
+        if (e.status === 403) {
+          viewState = 'forbidden';
+          errorMessage = 'You do not have permission to access this space.';
+          return;
+        }
+        if (e.status === 404) {
+          viewState = 'notfound';
+          return;
+        }
+        if (attempt < MAX_RETRIES) {
+          retryCount = attempt + 1;
+          const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          viewState = 'error';
+          errorMessage = 'Something went wrong. Please try again.';
+        }
       }
-      if (e.status === 403) {
-        viewState = 'forbidden';
-        errorMessage = 'You do not have permission to access this space.';
-        return;
-      }
-      if (e.status === 404) {
-        viewState = 'notfound';
-        return;
-      }
-      viewState = 'error';
-      errorMessage = 'Something went wrong. Please try again.';
     }
   }
 </script>
@@ -78,7 +132,7 @@
       </div>
     {:else if viewState === 'loaded'}
       <div class="flex-1 overflow-y-auto">
-        <ChannelList {channels} />
+        <ChannelList {channels} {permissions} />
       </div>
     {:else if viewState === 'forbidden'}
       <div class="flex flex-1 items-center justify-center p-4">

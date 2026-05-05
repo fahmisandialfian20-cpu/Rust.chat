@@ -5,9 +5,6 @@ node_modules/
 target/
 apps/server/target/
 
-# Package lock (regenerate with npm install)
-apps/web/package-lock.json
-
 # Build outputs
 Cargo.lock
 .env
@@ -19,3 +16,7 @@ TODO.md
 .opencode.jsonc
 *.pdb
 *.exe
+.opencode/
+.idea/
+.vscode/
+.playwright/

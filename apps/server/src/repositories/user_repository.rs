@@ -1,8 +1,8 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
-use crate::domain::user::{User, UserStatus, ClientDevice};
+use crate::domain::user::{ClientDevice, User, UserStatus};
 use crate::error::AppError;
 
 pub struct UserRepository {
@@ -128,25 +128,23 @@ impl UserRepository {
     }
 
     pub async fn check_username_exists(&self, username: &str) -> Result<bool, AppError> {
-        let result = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
-        )
-        .bind(username)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let result =
+            sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
+                .bind(username)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         Ok(result)
     }
 
     pub async fn check_email_exists(&self, email: &str) -> Result<bool, AppError> {
-        let result = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)",
-        )
-        .bind(email)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let result =
+            sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+                .bind(email)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         Ok(result)
     }
@@ -196,14 +194,12 @@ impl UserRepository {
     }
 
     pub async fn delete_device(&self, device_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
-        let result = sqlx::query(
-            "DELETE FROM client_devices WHERE id = $1 AND user_id = $2",
-        )
-        .bind(device_id)
-        .bind(user_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?;
+        let result = sqlx::query("DELETE FROM client_devices WHERE id = $1 AND user_id = $2")
+            .bind(device_id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound("Device not found".to_string()));

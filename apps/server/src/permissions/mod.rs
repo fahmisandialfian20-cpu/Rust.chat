@@ -4,5 +4,5 @@ pub mod resolver;
 pub mod service;
 
 pub use keys::PermissionKey;
-pub use resolver::{PermissionResult, PermissionResolver};
+pub use resolver::{PermissionResolver, PermissionResult};
 pub use service::PermissionService;

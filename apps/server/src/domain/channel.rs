@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use time::OffsetDateTime;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Channel {
@@ -20,8 +20,9 @@ pub struct Channel {
     pub updated_at: OffsetDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, Default)]
 pub enum ChannelKind {
+    #[default]
     Text,
     Voice,
     Video,
@@ -49,14 +50,9 @@ impl std::str::FromStr for ChannelKind {
     }
 }
 
-impl Default for ChannelKind {
-    fn default() -> Self {
-        ChannelKind::Text
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, Default)]
 pub enum ChannelVisibility {
+    #[default]
     Public,
     Private,
 }
@@ -78,12 +74,6 @@ impl std::str::FromStr for ChannelVisibility {
             "private" => Ok(ChannelVisibility::Private),
             _ => Err(()),
         }
-    }
-}
-
-impl Default for ChannelVisibility {
-    fn default() -> Self {
-        ChannelVisibility::Public
     }
 }
 

@@ -1,16 +1,16 @@
 use axum::{
-    extract::{Path, State, Query},
-    response::Json,
+    extract::{Path, Query, State},
     http::StatusCode,
+    response::Json,
 };
 use serde::Deserialize;
-use uuid::Uuid;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
-use crate::domain::invite::{Invite, CreateInvite};
-use crate::state::AppState;
+use crate::domain::invite::{CreateInvite, Invite, InviteResponse};
 use crate::error::AppError;
+use crate::state::AppState;
 
 #[derive(Deserialize, ToSchema)]
 pub struct ListQuery {
@@ -20,8 +20,12 @@ pub struct ListQuery {
     offset: i64,
 }
 
-fn default_limit() -> i64 { 50 }
-fn default_offset() -> i64 { 0 }
+fn default_limit() -> i64 {
+    50
+}
+fn default_offset() -> i64 {
+    0
+}
 
 #[utoipa::path(
     post,
@@ -34,9 +38,11 @@ fn default_offset() -> i64 { 0 }
 )]
 pub async fn create_invite(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(payload): Json<CreateInvite>,
 ) -> Result<Json<Invite>, AppError> {
-    let invite = state.invite_service.create_invite(Uuid::nil(), payload).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    let invite = state.invite_service.create_invite(user_id, payload).await?;
     Ok(Json(invite))
 }
 
@@ -54,10 +60,12 @@ pub async fn create_invite(
 )]
 pub async fn get_invite(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path(invite_id): Path<Uuid>,
-) -> Result<Json<Invite>, AppError> {
+) -> Result<Json<InviteResponse>, AppError> {
+    let _user_id = auth_user.user_id_uuid()?;
     let invite = state.invite_service.get_invite(invite_id).await?;
-    Ok(Json(invite))
+    Ok(Json(InviteResponse::from(invite)))
 }
 
 #[utoipa::path(
@@ -75,9 +83,9 @@ pub async fn get_invite(
 pub async fn get_invite_by_code(
     State(state): State<AppState>,
     Path(code): Path<String>,
-) -> Result<Json<Invite>, AppError> {
+) -> Result<Json<InviteResponse>, AppError> {
     let invite = state.invite_service.get_invite_by_code(&code).await?;
-    Ok(Json(invite))
+    Ok(Json(InviteResponse::from(invite)))
 }
 
 #[utoipa::path(
@@ -95,9 +103,9 @@ pub async fn get_invite_by_code(
 pub async fn validate_invite(
     State(state): State<AppState>,
     Path(code): Path<String>,
-) -> Result<Json<Invite>, AppError> {
+) -> Result<Json<InviteResponse>, AppError> {
     let invite = state.invite_service.validate_invite(&code).await?;
-    Ok(Json(invite))
+    Ok(Json(InviteResponse::from(invite)))
 }
 
 #[utoipa::path(
@@ -115,9 +123,9 @@ pub async fn validate_invite(
 pub async fn consume_invite(
     State(state): State<AppState>,
     Path(code): Path<String>,
-) -> Result<Json<Invite>, AppError> {
+) -> Result<Json<InviteResponse>, AppError> {
     let invite = state.invite_service.consume_invite(&code).await?;
-    Ok(Json(invite))
+    Ok(Json(InviteResponse::from(invite)))
 }
 
 #[utoipa::path(
@@ -135,11 +143,18 @@ pub async fn consume_invite(
 )]
 pub async fn list_space_invites(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path(space_id): Path<Uuid>,
     Query(query): Query<ListQuery>,
-) -> Result<Json<Vec<Invite>>, AppError> {
-    let invites = state.invite_service.list_space_invites(space_id, query.limit, query.offset).await?;
-    Ok(Json(invites))
+) -> Result<Json<Vec<InviteResponse>>, AppError> {
+    let _user_id = auth_user.user_id_uuid()?;
+    let invites = state
+        .invite_service
+        .list_space_invites(space_id, query.limit, query.offset)
+        .await?;
+    Ok(Json(
+        invites.into_iter().map(InviteResponse::from).collect(),
+    ))
 }
 
 #[utoipa::path(
@@ -156,9 +171,14 @@ pub async fn list_space_invites(
 )]
 pub async fn delete_invite(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path(invite_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    state.invite_service.delete_invite(invite_id).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    state
+        .invite_service
+        .delete_invite(user_id, invite_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -183,12 +203,17 @@ pub async fn accept_invite(
     Path(code): Path<String>,
 ) -> Result<Json<String>, AppError> {
     let user_id = auth_user.user_id_uuid()?;
+    let key = crate::middleware::rate_limit::invite_key(&auth_user.user_id);
+    state
+        .rate_limiter
+        .check(&key, state.config.rate_limit.login, 60)
+        .await?;
     let result = state.invite_service.accept_invite(&code, user_id).await?;
     Ok(Json(result))
 }
 
 pub fn router() -> axum::Router<AppState> {
-    use axum::routing::{get, post, delete};
+    use axum::routing::{delete, get, post};
 
     axum::Router::new()
         .route("/invites", post(create_invite))

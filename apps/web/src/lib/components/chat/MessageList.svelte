@@ -8,12 +8,18 @@
     loading = false,
     hasMore = false,
     loadingMore = false,
+    readOnly = false,
+    permissions = [],
+    currentUserId = '',
     onloadMore,
   }: {
     messages: Message[];
     loading?: boolean;
     hasMore?: boolean;
     loadingMore?: boolean;
+    readOnly?: boolean;
+    permissions?: string[];
+    currentUserId?: string;
     onloadMore?: () => void;
   } = $props();
 
@@ -51,6 +57,12 @@
     </div>
   {:else}
     <div class="flex flex-col">
+      {#if readOnly}
+        <div class="flex items-center justify-center gap-2 border-b border-white/10 bg-amber-500/5 px-4 py-2">
+          <span class="text-xs font-medium text-amber-400">Read-only</span>
+          <span class="text-xs text-amber-300/60">You don't have permission to send messages</span>
+        </div>
+      {/if}
       {#if hasMore}
         <div class="flex justify-center px-4 py-3">
           <button
@@ -64,7 +76,7 @@
       {/if}
 
       {#each messages as message (message.id)}
-        <MessageItem {message} />
+        <MessageItem {message} {permissions} {currentUserId} />
       {/each}
     </div>
   {/if}
