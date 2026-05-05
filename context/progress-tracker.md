@@ -5,6 +5,7 @@
 Current phase: `MVP Core Stabilization`
 
 Last updated: 2026-05-05
+Session completed: Phase 1 + Phase 2 + Bug Fixes + Phase 3 Planning
 
 ---
 
@@ -94,14 +95,37 @@ Last updated: 2026-05-05
 
 ---
 
+## Security Audit Results (Phase 3 Planning)
+
+Phase 2 research uncovered **critical security gaps** requiring immediate fixes before any frontend work.
+
+### Critical Gaps Found
+
+| Component | Severity | Issue | Task |
+|-----------|----------|-------|------|
+| Message handlers | CRITICAL | `list_messages` and `get_message` are completely unauthenticated — anyone can read any channel | 3A |
+| Message handlers | CRITICAL | `create/update/delete_message` never call `PermissionService` | 3A |
+| Invite handlers | CRITICAL | `create_invite` uses `Uuid::nil()` as acting user | 3B |
+| Invite responses | CRITICAL | API leaks plaintext invite codes in get/list responses | 3B |
+| Invite consumption | HIGH | Race condition allows exceeding `max_uses` | 3B |
+| WebSocket gateway | HIGH | Broadcasts all events globally without permission checks | 3C |
+| WebSocket inbound | HIGH | Deserializes trusted `WsEvent` instead of parsing client commands | 3C |
+
+Full audit reports in `context/tasks/phase3-research/`.
+Task context in `context/tasks/phase3-e2e-security-hardening.md`.
+
+---
+
 ## What's Next
 
-Priority order for remaining MVP work:
+**CRITICAL: Do NOT proceed to frontend work until Phase 3 is complete.**
 
-1. **WebSocket Permission Tests** — realtime events respect same rules as REST
-2. **Invite Security Tests** — token hashing, expiration, max uses
-3. **End-to-End Message Flow** — send, edit, delete with permission checks
-4. **Frontend Channel Visibility** — only show authorized channels
+Priority order:
+
+1. **Task 3A: Message Handler Security** — Add auth + permission checks to all message endpoints
+2. **Task 3B: Invite Security** — Fix auth, remove plaintext leaks, fix race condition
+3. **Task 3C: WebSocket Permission Enforcement** — Parse commands, route through services, channel-scoped broadcast
+4. **Frontend Channel Visibility** — only show authorized channels (after backend is secure)
 
 ---
 
@@ -119,3 +143,48 @@ Do not track here unless a task explicitly asks:
 - Threads
 - Bots / Webhooks
 - Production deployment automation
+
+---
+
+## Session Achievement Record
+
+**Session:** 2026-05-05 MVP Core Stabilization — Phase 1 & 2
+
+**Commits:** `240d57a` — `local-work` branch
+
+### Phase 1: Foundation Repair ✅
+- Fixed `tests/common/mod.rs` — synchronized test constructors with production (AppConfig, AppState, SpaceService, InviteService)
+- Fixed 31 clippy errors across `src/` (dead code, needless borrows, derivable impls, redundant closures)
+- Backend: `cargo check`, `cargo clippy -- -D warnings`, `cargo test --no-run`, `cargo fmt --check` — all clean
+
+### Phase 2: Permission Boundary Tests ✅
+- **Discovered critical `Uuid::nil()` security bug** in `handlers/messages.rs` (update/delete handlers)
+- Fixed: Extract `AuthUser` and pass real `user_id` to `message_service`
+- Added 9 new permission tests (20 total now)
+- All 20 tests compile and run with `cargo test -- --test-threads=1`
+
+### Bug Fixes (3) ✅
+1. **Login wrong password → 500** → Fixed `verify_password` error propagation → now returns 401 Unauthorized
+2. **Feature flag disabled not denying SendMessages** → Added `PermissionKey::SendMessages => flags.text_enabled` to resolver
+3. **Invite accept failing** → Test now uses `InviteService::create_invite()` instead of raw SQL with fake hash
+
+### Documentation ✅
+- Created `context/AGENTS.md` — central instruction hub
+- Created `context/code-standards.md` — Rust + SvelteKit coding standards
+- Created `context/progress-tracker.md` — this file
+- Created 5 task context files in `context/tasks/`
+- Updated `context/05-storage-infrastructure.md` with Supabase support
+- Removed 22 deprecated `docs/specs/` files (repo lighter)
+
+### Infrastructure ✅
+- Docker PostgreSQL + Redis containers running
+- `.env` and `.env.example` updated for local development
+- Committed to GitHub: `240d57a`
+- Repo size: 22.53 MiB (lightweight, no large files)
+
+### Verification Evidence
+```bash
+cargo test -- --test-threads=1     # test result: ok. 20 passed; 0 failed
+cargo clippy -- -D warnings        # Finished dev profile (0 errors)
+cargo fmt --check                  # (no output = clean)
+```

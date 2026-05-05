@@ -40,12 +40,32 @@ impl FromRequestParts<AppState> for AuthUser {
                 .headers
                 .get("authorization")
                 .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.strip_prefix("Bearer "))
-                .ok_or_else(|| {
-                    AppError::Unauthorized("Missing authorization header".to_string())
-                })?;
+                .and_then(|s| s.strip_prefix("Bearer "));
 
-            let token_data = state.jwt_manager.verify_token(auth_header)?;
+            let token = match auth_header {
+                Some(t) => t.to_string(),
+                None => {
+                    // Fallback: check query parameter for WebSocket token
+                    parts
+                        .uri
+                        .query()
+                        .and_then(|q| {
+                            q.split('&').find_map(|pair| {
+                                let (key, value) = pair.split_once('=')?;
+                                if key == "token" {
+                                    Some(value.to_string())
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                        .ok_or_else(|| {
+                            AppError::Unauthorized("Missing authorization header".to_string())
+                        })?
+                }
+            };
+
+            let token_data = state.jwt_manager.verify_token(&token)?;
             token_data.claims
         };
 

@@ -72,9 +72,14 @@ pub async fn create_message(
 )]
 pub async fn get_message(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path((_channel_id, message_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Message>, AppError> {
-    let message = state.message_service.get_message(message_id).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    let message = state
+        .message_service
+        .get_message(message_id, user_id)
+        .await?;
     Ok(Json(message))
 }
 
@@ -93,12 +98,14 @@ pub async fn get_message(
 )]
 pub async fn list_messages(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Path(channel_id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Message>>, AppError> {
+    let user_id = auth_user.user_id_uuid()?;
     let messages = state
         .message_service
-        .list_channel_messages(channel_id, query.limit, query.before)
+        .list_channel_messages(channel_id, user_id, query.limit, query.before)
         .await?;
     Ok(Json(messages))
 }

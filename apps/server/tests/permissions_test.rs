@@ -1,5 +1,8 @@
 mod common;
 
+use axum::body::Body;
+use axum::http::Request;
+use futures_util::{SinkExt, StreamExt};
 use rust_chat_server::domain::invite::CreateInvite;
 use rust_chat_server::domain::message::UpdateMessage;
 use rust_chat_server::error::AppError;
@@ -11,8 +14,12 @@ use rust_chat_server::repositories::role_repository::RoleRepository;
 use rust_chat_server::repositories::space_repository::SpaceRepository;
 use rust_chat_server::services::invite_service::InviteService;
 use rust_chat_server::services::message_service::MessageService;
+use serde_json::Value;
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::time::Duration;
+use time::OffsetDateTime;
+use tower::ServiceExt;
 use uuid::Uuid;
 
 async fn setup_db() -> PgPool {
@@ -49,12 +56,13 @@ async fn setup_db() -> PgPool {
 
 async fn create_user(pool: &PgPool, username: &str) -> Uuid {
     let id = Uuid::now_v7();
+    let hash = rust_chat_server::auth::password::hash_password("test", "test-pepper").unwrap();
     sqlx::query(
         "INSERT INTO users (id, username, password_hash, status) VALUES ($1, $2, $3, 'active')",
     )
     .bind(id)
     .bind(username)
-    .bind("test-hash")
+    .bind(hash)
     .execute(pool)
     .await
     .unwrap();
@@ -447,7 +455,13 @@ async fn cannot_edit_others_message() {
 
     let message_id = create_message(&pool, channel_id, user_a, "hello from A").await;
 
-    let service = MessageService::new(Arc::new(MessageRepository::new(pool.clone())));
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let service = MessageService::new(
+        Arc::new(MessageRepository::new(pool.clone())),
+        permission_service,
+        channel_repo,
+    );
     let result = service
         .update_message(
             message_id,
@@ -483,7 +497,13 @@ async fn cannot_delete_others_message() {
 
     let message_id = create_message(&pool, channel_id, user_a, "hello from A").await;
 
-    let service = MessageService::new(Arc::new(MessageRepository::new(pool.clone())));
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let service = MessageService::new(
+        Arc::new(MessageRepository::new(pool.clone())),
+        permission_service,
+        channel_repo,
+    );
     let result = service.delete_message(message_id, user_b).await;
 
     assert!(
@@ -511,7 +531,14 @@ async fn invite_accept_creates_membership() {
     let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
     let role_repo = Arc::new(RoleRepository::new(pool.clone()));
     let invite_repo = Arc::new(InviteRepository::new(pool.clone()));
-    let invite_service = InviteService::new(invite_repo, space_repo, channel_repo, role_repo);
+    let permission_service = PermissionService::new(pool.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo,
+        channel_repo,
+        role_repo,
+        permission_service,
+    );
 
     let invite = invite_service
         .create_invite(
@@ -542,9 +569,901 @@ async fn invite_accept_creates_membership() {
 }
 
 #[tokio::test]
+async fn test_list_messages_unauthenticated() {
+    let pool = setup_db().await;
+    let user_a = create_user(&pool, "user_a").await;
+    let user_b = create_user(&pool, "user_b").await;
+    let space_id = create_space(&pool, "testspace", user_a).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_a).await;
+    let _ = create_message(&pool, channel_id, user_a, "hello").await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service
+        .list_channel_messages(channel_id, user_b, 50, None)
+        .await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "Non-space-member should be denied list_channel_messages"
+    );
+}
+
+#[tokio::test]
+async fn test_list_messages_no_permission() {
+    let pool = setup_db().await;
+    let user_id = create_user(&pool, "user").await;
+    let space_id = create_space(&pool, "testspace", user_id).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_id).await;
+    let _ = create_message(&pool, channel_id, user_id, "hello").await;
+
+    let membership_id = make_member(&pool, user_id, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    assign_role(&pool, membership_id, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service
+        .list_channel_messages(channel_id, user_id, 50, None)
+        .await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "Member without ReadMessages should be denied"
+    );
+}
+
+#[tokio::test]
+async fn test_get_message_unauthorized() {
+    let pool = setup_db().await;
+    let user_a = create_user(&pool, "user_a").await;
+    let user_b = create_user(&pool, "user_b").await;
+    let space_id = create_space(&pool, "testspace", user_a).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_a).await;
+    let msg_id = create_message(&pool, channel_id, user_a, "secret").await;
+
+    let membership_id = make_member(&pool, user_b, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    assign_role(&pool, membership_id, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service.get_message(msg_id, user_b).await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "Member without ReadMessages should be denied get_message"
+    );
+}
+
+#[tokio::test]
+async fn test_create_message_no_send_permission() {
+    let pool = setup_db().await;
+    let user_id = create_user(&pool, "user").await;
+    let space_id = create_space(&pool, "testspace", user_id).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_id).await;
+
+    let membership_id = make_member(&pool, user_id, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    assign_role(&pool, membership_id, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service
+        .create_message(
+            channel_id,
+            user_id,
+            rust_chat_server::domain::message::CreateMessage {
+                content: "hello".to_string(),
+                kind: None,
+                reply_to_message_id: None,
+            },
+        )
+        .await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "Member without SendMessages should be denied"
+    );
+}
+
+#[tokio::test]
+async fn test_create_message_feature_flag_disabled() {
+    let pool = setup_db().await;
+    let user_id = create_user(&pool, "user").await;
+    let space_id = create_space(&pool, "testspace", user_id).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_id).await;
+
+    let membership_id = make_member(&pool, user_id, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    assign_role(&pool, membership_id, role_id).await;
+
+    sqlx::query("INSERT INTO channel_feature_flags (channel_id, text_enabled) VALUES ($1, false)")
+        .bind(channel_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service
+        .create_message(
+            channel_id,
+            user_id,
+            rust_chat_server::domain::message::CreateMessage {
+                content: "hello".to_string(),
+                kind: None,
+                reply_to_message_id: None,
+            },
+        )
+        .await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "Member should be denied when text_enabled=false"
+    );
+}
+
+#[tokio::test]
+async fn test_edit_own_message_success() {
+    let pool = setup_db().await;
+    let user_id = create_user(&pool, "user").await;
+    let space_id = create_space(&pool, "testspace", user_id).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_id).await;
+    let msg_id = create_message(&pool, channel_id, user_id, "original").await;
+
+    let membership_id = make_member(&pool, user_id, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    grant_permission(&pool, role_id, "read_messages").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    grant_permission(&pool, role_id, "edit_own_message").await;
+    assign_role(&pool, membership_id, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service
+        .update_message(
+            msg_id,
+            user_id,
+            UpdateMessage {
+                content: Some("edited".to_string()),
+            },
+        )
+        .await;
+
+    assert!(result.is_ok(), "Owner with EditOwnMessage should succeed");
+}
+
+#[tokio::test]
+async fn test_edit_other_message_forbidden() {
+    let pool = setup_db().await;
+    let user_a = create_user(&pool, "user_a").await;
+    let user_b = create_user(&pool, "user_b").await;
+    let space_id = create_space(&pool, "testspace", user_a).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_a).await;
+    let msg_id = create_message(&pool, channel_id, user_a, "original").await;
+
+    let membership_b = make_member(&pool, user_b, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    grant_permission(&pool, role_id, "read_messages").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    grant_permission(&pool, role_id, "edit_own_message").await;
+    assign_role(&pool, membership_b, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service
+        .update_message(
+            msg_id,
+            user_b,
+            UpdateMessage {
+                content: Some("hacked".to_string()),
+            },
+        )
+        .await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "User B without EditAnyMessage should be denied editing user A's message"
+    );
+}
+
+#[tokio::test]
+async fn test_edit_other_message_as_admin() {
+    let pool = setup_db().await;
+    let user_a = create_user(&pool, "user_a").await;
+    let admin = create_user(&pool, "admin").await;
+    let space_id = create_space(&pool, "testspace", user_a).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_a).await;
+    let msg_id = create_message(&pool, channel_id, user_a, "original").await;
+
+    let membership_admin = make_member(&pool, admin, space_id).await;
+    let role_id = create_role(&pool, space_id, "admin").await;
+    grant_permission(&pool, role_id, "read_messages").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    grant_permission(&pool, role_id, "edit_any_message").await;
+    assign_role(&pool, membership_admin, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service
+        .update_message(
+            msg_id,
+            admin,
+            UpdateMessage {
+                content: Some("admin-edited".to_string()),
+            },
+        )
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "Admin with EditAnyMessage should be able to edit other's message"
+    );
+}
+
+#[tokio::test]
+async fn test_delete_own_message_success() {
+    let pool = setup_db().await;
+    let user_id = create_user(&pool, "user").await;
+    let space_id = create_space(&pool, "testspace", user_id).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_id).await;
+    let msg_id = create_message(&pool, channel_id, user_id, "to-delete").await;
+
+    let membership_id = make_member(&pool, user_id, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    grant_permission(&pool, role_id, "read_messages").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    grant_permission(&pool, role_id, "delete_own_message").await;
+    assign_role(&pool, membership_id, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service.delete_message(msg_id, user_id).await;
+
+    assert!(result.is_ok(), "Owner with DeleteOwnMessage should succeed");
+}
+
+#[tokio::test]
+async fn test_delete_other_message_forbidden() {
+    let pool = setup_db().await;
+    let user_a = create_user(&pool, "user_a").await;
+    let user_b = create_user(&pool, "user_b").await;
+    let space_id = create_space(&pool, "testspace", user_a).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_a).await;
+    let msg_id = create_message(&pool, channel_id, user_a, "to-delete").await;
+
+    let membership_b = make_member(&pool, user_b, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    grant_permission(&pool, role_id, "read_messages").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    grant_permission(&pool, role_id, "delete_own_message").await;
+    assign_role(&pool, membership_b, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service.delete_message(msg_id, user_b).await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "User B without DeleteAnyMessage should be denied deleting user A's message"
+    );
+}
+
+#[tokio::test]
+async fn test_delete_other_message_as_admin() {
+    let pool = setup_db().await;
+    let user_a = create_user(&pool, "user_a").await;
+    let admin = create_user(&pool, "admin").await;
+    let space_id = create_space(&pool, "testspace", user_a).await;
+    let channel_id = create_channel(&pool, space_id, "general", user_a).await;
+    let msg_id = create_message(&pool, channel_id, user_a, "to-delete").await;
+
+    let membership_admin = make_member(&pool, admin, space_id).await;
+    let role_id = create_role(&pool, space_id, "admin").await;
+    grant_permission(&pool, role_id, "read_messages").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    grant_permission(&pool, role_id, "delete_any_message").await;
+    assign_role(&pool, membership_admin, role_id).await;
+
+    let permission_service = PermissionService::new(pool.clone());
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+    let msg_service = MessageService::new(message_repo, permission_service, channel_repo);
+
+    let result = msg_service.delete_message(msg_id, admin).await;
+
+    assert!(
+        result.is_ok(),
+        "Admin with DeleteAnyMessage should be able to delete other's message"
+    );
+}
+
+#[tokio::test]
+async fn test_create_invite_unauthenticated() {
+    let pool = setup_db().await;
+    let user_id = create_user(&pool, "user").await;
+    let space_id = create_space(&pool, "testspace", user_id).await;
+
+    let space_repo = Arc::new(SpaceRepository::new(pool.clone()));
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let role_repo = Arc::new(RoleRepository::new(pool.clone()));
+    let invite_repo = Arc::new(InviteRepository::new(pool.clone()));
+    let permission_service = PermissionService::new(pool.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo,
+        channel_repo,
+        role_repo,
+        permission_service,
+    );
+
+    let result = invite_service
+        .create_invite(
+            user_id,
+            CreateInvite {
+                space_id: Some(space_id),
+                channel_id: None,
+                max_uses: Some(10),
+                expires_at: None,
+            },
+        )
+        .await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "Non-member without ManageInvites should be denied"
+    );
+}
+
+#[tokio::test]
+async fn test_create_invite_no_permission() {
+    let pool = setup_db().await;
+    let user_id = create_user(&pool, "user").await;
+    let space_id = create_space(&pool, "testspace", user_id).await;
+
+    let membership_id = make_member(&pool, user_id, space_id).await;
+    let role_id = create_role(&pool, space_id, "member").await;
+    assign_role(&pool, membership_id, role_id).await;
+
+    let space_repo = Arc::new(SpaceRepository::new(pool.clone()));
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let role_repo = Arc::new(RoleRepository::new(pool.clone()));
+    let invite_repo = Arc::new(InviteRepository::new(pool.clone()));
+    let permission_service = PermissionService::new(pool.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo,
+        channel_repo,
+        role_repo,
+        permission_service,
+    );
+
+    let result = invite_service
+        .create_invite(
+            user_id,
+            CreateInvite {
+                space_id: Some(space_id),
+                channel_id: None,
+                max_uses: Some(10),
+                expires_at: None,
+            },
+        )
+        .await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::Forbidden(_)),
+        "Member without ManageInvites should be denied"
+    );
+}
+
+#[tokio::test]
+async fn test_create_invite_with_permission_success() {
+    let pool = setup_db().await;
+    let user_id = create_user(&pool, "user").await;
+    let space_id = create_space(&pool, "testspace", user_id).await;
+
+    let membership_id = make_member(&pool, user_id, space_id).await;
+    let role_id = create_role(&pool, space_id, "admin").await;
+    grant_permission(&pool, role_id, "manage_invites").await;
+    assign_role(&pool, membership_id, role_id).await;
+
+    let space_repo = Arc::new(SpaceRepository::new(pool.clone()));
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let role_repo = Arc::new(RoleRepository::new(pool.clone()));
+    let invite_repo = Arc::new(InviteRepository::new(pool.clone()));
+    let permission_service = PermissionService::new(pool.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo,
+        channel_repo,
+        role_repo,
+        permission_service,
+    );
+
+    let result = invite_service
+        .create_invite(
+            user_id,
+            CreateInvite {
+                space_id: Some(space_id),
+                channel_id: None,
+                max_uses: Some(10),
+                expires_at: None,
+            },
+        )
+        .await;
+
+    assert!(result.is_ok(), "Member with ManageInvites should succeed");
+}
+
+#[tokio::test]
+async fn test_accept_invite_expired() {
+    let pool = setup_db().await;
+    let hoster = create_user(&pool, "hoster").await;
+    let new_user = create_user(&pool, "newbie").await;
+    let space_id = create_space(&pool, "testspace", hoster).await;
+
+    sqlx::query(
+        "INSERT INTO instance_settings (id, owner_user_id, instance_name) VALUES (1, $1, 'test')",
+    )
+    .bind(hoster)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let space_repo = Arc::new(SpaceRepository::new(pool.clone()));
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let role_repo = Arc::new(RoleRepository::new(pool.clone()));
+    let invite_repo = Arc::new(InviteRepository::new(pool.clone()));
+    let permission_service = PermissionService::new(pool.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo,
+        channel_repo,
+        role_repo,
+        permission_service,
+    );
+
+    let invite = invite_service
+        .create_invite(
+            hoster,
+            CreateInvite {
+                space_id: Some(space_id),
+                channel_id: None,
+                max_uses: Some(10),
+                expires_at: Some(OffsetDateTime::now_utc() + time::Duration::hours(1)),
+            },
+        )
+        .await
+        .unwrap();
+
+    // Manually expire the invite in the database
+    sqlx::query("UPDATE invites SET expires_at = $1 WHERE id = $2")
+        .bind(OffsetDateTime::now_utc() - time::Duration::hours(1))
+        .bind(invite.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let result = invite_service.accept_invite(&invite.code, new_user).await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::BadRequest(_)),
+        "Expired invite should be rejected"
+    );
+}
+
+#[tokio::test]
+async fn test_accept_invite_max_uses_exceeded() {
+    let pool = setup_db().await;
+    let hoster = create_user(&pool, "hoster").await;
+    let user_a = create_user(&pool, "user_a").await;
+    let user_b = create_user(&pool, "user_b").await;
+    let space_id = create_space(&pool, "testspace", hoster).await;
+
+    sqlx::query(
+        "INSERT INTO instance_settings (id, owner_user_id, instance_name) VALUES (1, $1, 'test')",
+    )
+    .bind(hoster)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let space_repo = Arc::new(SpaceRepository::new(pool.clone()));
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let role_repo = Arc::new(RoleRepository::new(pool.clone()));
+    let invite_repo = Arc::new(InviteRepository::new(pool.clone()));
+    let permission_service = PermissionService::new(pool.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo,
+        channel_repo,
+        role_repo,
+        permission_service,
+    );
+
+    let invite = invite_service
+        .create_invite(
+            hoster,
+            CreateInvite {
+                space_id: Some(space_id),
+                channel_id: None,
+                max_uses: Some(1),
+                expires_at: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let _ = invite_service.accept_invite(&invite.code, user_a).await;
+
+    let result = invite_service.accept_invite(&invite.code, user_b).await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::BadRequest(_)),
+        "Exhausted invite should be rejected"
+    );
+}
+
+#[tokio::test]
+async fn test_accept_invite_invalid_code() {
+    let pool = setup_db().await;
+    let new_user = create_user(&pool, "newbie").await;
+
+    let space_repo = Arc::new(SpaceRepository::new(pool.clone()));
+    let channel_repo = Arc::new(ChannelRepository::new(pool.clone()));
+    let role_repo = Arc::new(RoleRepository::new(pool.clone()));
+    let invite_repo = Arc::new(InviteRepository::new(pool.clone()));
+    let permission_service = PermissionService::new(pool.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo,
+        channel_repo,
+        role_repo,
+        permission_service,
+    );
+
+    let result = invite_service
+        .accept_invite("nonexistent-code", new_user)
+        .await;
+
+    assert!(
+        matches!(result.unwrap_err(), AppError::NotFound(_)),
+        "Non-existent invite code should return NotFound"
+    );
+}
+
+async fn start_test_server() -> (u16, String) {
+    let (app, pool) = common::setup_test_app().await;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    let hoster = create_user(&pool, "hoster").await;
+    let _space_id = create_space(&pool, "testspace", hoster).await;
+
+    sqlx::query(
+        "INSERT INTO instance_settings (id, owner_user_id, instance_name) VALUES (1, $1, 'test-instance')",
+    )
+    .bind(hoster)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username_or_email": "hoster", "password": "test"})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let token = body["access_token"].as_str().unwrap_or("").to_string();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    (port, token)
+}
+
+async fn start_test_server_with_permission() -> (u16, String, Uuid) {
+    let (app, pool) = common::setup_test_app().await;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    let hoster = create_user(&pool, "hoster").await;
+    let space_id = create_space(&pool, "testspace", hoster).await;
+    let channel_id = create_channel(&pool, space_id, "general", hoster).await;
+    let membership = make_member(&pool, hoster, space_id).await;
+    let role_id = create_role(&pool, space_id, "admin").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    grant_permission(&pool, role_id, "read_messages").await;
+    grant_permission(&pool, role_id, "view_channel").await;
+    assign_role(&pool, membership, role_id).await;
+
+    sqlx::query(
+        "INSERT INTO instance_settings (id, owner_user_id, instance_name) VALUES (1, $1, 'test-instance')",
+    )
+    .bind(hoster)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username_or_email": "hoster", "password": "test"})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let token = body["access_token"].as_str().unwrap_or("").to_string();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    (port, token, channel_id)
+}
+
+#[tokio::test]
+async fn test_ws_send_without_permission() {
+    let (port, token) = start_test_server().await;
+    let url = format!("ws://127.0.0.1:{}/ws?token={}", port, token);
+
+    let (mut socket, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+
+    // Wait for hello
+    let msg = socket.next().await.unwrap().unwrap();
+    assert!(msg.to_string().contains("hello"));
+
+    // Try to send message without permission
+    let cmd = serde_json::json!({
+        "type": "send_message",
+        "data": {
+            "channel_id": "00000000-0000-0000-0000-000000000000",
+            "content": "hello"
+        }
+    });
+    socket
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            cmd.to_string(),
+        ))
+        .await
+        .unwrap();
+
+    // Wait for error response
+    let msg = tokio::time::timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let text = msg.to_string();
+    assert!(
+        text.contains("forbidden") || text.contains("error"),
+        "Expected error response, got: {}",
+        text
+    );
+}
+
+#[tokio::test]
+async fn test_ws_send_with_permission() {
+    let (port, token, channel_id) = start_test_server_with_permission().await;
+    let url = format!("ws://127.0.0.1:{}/ws?token={}", port, token);
+    let (mut socket, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+
+    // Wait for hello
+    let msg = socket.next().await.unwrap().unwrap();
+    assert!(msg.to_string().contains("hello"));
+
+    // Join the channel
+    let join = serde_json::json!({
+        "type": "join_channel",
+        "data": { "channel_id": channel_id }
+    });
+    socket
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            join.to_string(),
+        ))
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Send message
+    let send = serde_json::json!({
+        "type": "send_message",
+        "data": {
+            "channel_id": channel_id,
+            "content": "hello from WS"
+        }
+    });
+    socket
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            send.to_string(),
+        ))
+        .await
+        .unwrap();
+
+    // Should receive message.created event
+    let msg = tokio::time::timeout(Duration::from_secs(5), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let text = msg.to_string();
+    assert!(
+        text.contains("message.created"),
+        "Expected message.created event, got: {}",
+        text
+    );
+}
+
+async fn start_test_server_cross_channel() -> (u16, String, Uuid, Uuid) {
+    let (app, pool) = common::setup_test_app().await;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    let hoster = create_user(&pool, "hoster").await;
+    let space_id = create_space(&pool, "testspace", hoster).await;
+    let channel_a = create_channel(&pool, space_id, "channel-a", hoster).await;
+    let channel_b = create_channel(&pool, space_id, "channel-b", hoster).await;
+
+    let membership = make_member(&pool, hoster, space_id).await;
+    let role_id = create_role(&pool, space_id, "admin").await;
+    grant_permission(&pool, role_id, "send_messages").await;
+    grant_permission(&pool, role_id, "read_messages").await;
+    grant_permission(&pool, role_id, "view_channel").await;
+    assign_role(&pool, membership, role_id).await;
+
+    sqlx::query(
+        "INSERT INTO instance_settings (id, owner_user_id, instance_name) VALUES (1, $1, 'test-instance')",
+    )
+    .bind(hoster)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username_or_email": "hoster", "password": "test"})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let token = body["access_token"].as_str().unwrap_or("").to_string();
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    (port, token, channel_a, channel_b)
+}
+
+#[tokio::test]
+async fn test_ws_cross_channel_leak() {
+    let (port, token, channel_a, channel_b) = start_test_server_cross_channel().await;
+    let url = format!("ws://127.0.0.1:{}/ws?token={}", port, token);
+    let (mut socket, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+
+    // Wait for hello
+    let _hello = socket.next().await.unwrap().unwrap();
+
+    // Subscribe to channel A only
+    let join = serde_json::json!({
+        "type": "join_channel",
+        "data": { "channel_id": channel_a }
+    });
+    socket
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            join.to_string(),
+        ))
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Send message to channel B
+    let send = serde_json::json!({
+        "type": "send_message",
+        "data": {
+            "channel_id": channel_b,
+            "content": "secret message"
+        }
+    });
+    socket
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            send.to_string(),
+        ))
+        .await
+        .unwrap();
+
+    // Should NOT receive message.created since we didn't subscribe to channel B
+    // No leak = timeout waiting for message from unsubscribed channel
+    let result = tokio::time::timeout(Duration::from_secs(2), socket.next()).await;
+    assert!(
+        result.is_err(),
+        "Expected timeout (no message leak), but got: {:?}",
+        result
+    );
+}
+
+#[tokio::test]
 async fn websocket_respects_permission() {
-    // This test requires a running WebSocket server and connection.
-    // It is documented as a known gap for automated integration tests.
-    // Manual verification: connect WS as member without SendMessages,
-    // attempt to send message event, verify rejection.
+    // Kept as documentation placeholder
+    // Integration tests above cover the main scenarios
 }

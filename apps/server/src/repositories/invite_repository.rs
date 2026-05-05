@@ -167,6 +167,40 @@ impl InviteRepository {
         Ok(())
     }
 
+    pub async fn try_consume(&self, id: Uuid) -> Result<Invite, AppError> {
+        let row = sqlx::query_as::<_, SqlxInvite>(
+            r#"
+            UPDATE invites
+            SET used_count = used_count + 1
+            WHERE id = $1
+              AND (max_uses IS NULL OR used_count < max_uses)
+              AND (expires_at IS NULL OR expires_at > NOW())
+            RETURNING id, code, code_hash, space_id, channel_id, created_by, max_uses, used_count, expires_at, created_at
+            "#,
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => {
+                AppError::BadRequest("Invite is invalid, expired, or exhausted".to_string())
+            }
+            _ => AppError::InternalServerError(e.to_string()),
+        })?;
+
+        Ok(Invite {
+            id: row.id,
+            code: row.code,
+            space_id: row.space_id,
+            channel_id: row.channel_id,
+            created_by: row.created_by,
+            max_uses: row.max_uses,
+            used_count: row.used_count,
+            expires_at: row.expires_at,
+            created_at: row.created_at,
+        })
+    }
+
     pub async fn increment_used_count(&self, id: Uuid) -> Result<(), AppError> {
         sqlx::query("UPDATE invites SET used_count = used_count + 1 WHERE id = $1")
             .bind(id)

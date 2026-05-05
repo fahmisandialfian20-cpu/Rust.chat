@@ -78,18 +78,23 @@ async fn main() {
 
     let space_service = SpaceService::new(space_repo.clone(), role_repo.clone());
     let channel_service = ChannelService::new(channel_repo.clone());
-    let invite_service = InviteService::new(
-        invite_repo,
-        space_repo.clone(),
-        channel_repo.clone(),
-        role_repo.clone(),
-    );
-    let message_service = MessageService::new(message_repo);
     let presence_service = PresenceService::new(redis.clone());
     let typing_service = TypingService::new(redis.clone());
     let realtime_hub = Arc::new(rust_chat_server::realtime::hub::RealtimeHub::default());
 
     let permission_service = PermissionService::new(db.clone());
+    let invite_service = InviteService::new(
+        invite_repo,
+        space_repo.clone(),
+        channel_repo.clone(),
+        role_repo.clone(),
+        permission_service.clone(),
+    );
+    let message_service = MessageService::new(
+        message_repo,
+        permission_service.clone(),
+        channel_repo.clone(),
+    );
     let audit_repo = AuditRepository::new(db.clone());
     let audit_service = AuditService::new(audit_repo, permission_service.clone());
     let storage_provider = create_storage_provider(

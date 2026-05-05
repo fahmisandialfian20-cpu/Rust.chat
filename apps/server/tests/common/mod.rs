@@ -27,6 +27,7 @@ use rust_chat_server::state::AppState;
 use rust_chat_server::storage::provider::create_storage_provider;
 use sqlx::PgPool;
 
+#[allow(dead_code)]
 pub async fn setup_test_app() -> (axum::Router, PgPool) {
     let database_url =
         std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for tests");
@@ -148,8 +149,13 @@ pub async fn setup_test_app() -> (axum::Router, PgPool) {
             space_repo.clone(),
             channel_repo.clone(),
             role_repo.clone(),
+            permission_service.clone(),
         ),
-        message_service: MessageService::new(message_repo),
+        message_service: MessageService::new(
+            message_repo,
+            permission_service.clone(),
+            channel_repo.clone(),
+        ),
         presence_service: PresenceService::new(redis_conn.clone()),
         typing_service: TypingService::new(redis_conn),
         permission_service,
@@ -161,6 +167,10 @@ pub async fn setup_test_app() -> (axum::Router, PgPool) {
 
     let app = axum::Router::new()
         .merge(rust_chat_server::handlers::auth::router())
+        .route(
+            "/ws",
+            axum::routing::any(rust_chat_server::realtime::gateway::ws_upgrade),
+        )
         .with_state(state);
 
     (app, pool)

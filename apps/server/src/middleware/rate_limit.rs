@@ -52,3 +52,7 @@ pub fn message_key(user_id: &str) -> String {
 pub fn upload_key(user_id: &str) -> String {
     format!("ratelimit:upload:{}", user_id)
 }
+
+pub fn invite_key(user_id: &str) -> String {
+    format!("ratelimit:invite:{}", user_id)
+}
