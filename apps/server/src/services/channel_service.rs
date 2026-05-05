@@ -128,7 +128,12 @@ impl ChannelService {
     }
 
     pub async fn archive_channel(&self, channel_id: Uuid) -> Result<(), AppError> {
-        self.repository.archive(channel_id).await
+        let channel = self.repository.find_by_id(channel_id).await?;
+        self.repository.archive(channel_id).await?;
+        if let Ok(json) = WsEvent::ChannelUpdated(channel).to_json() {
+            self.hub.publish_to_channel(channel_id, json).await;
+        }
+        Ok(())
     }
 
     pub async fn delete_channel(&self, channel_id: Uuid) -> Result<(), AppError> {
