@@ -135,8 +135,8 @@ Phase 3 security hardening completed. All critical gaps fixed.
 | `WsEvent::to_json()` | HIGH | `.unwrap()` panics on serialization failure | ✅ Fixed |
 
 Full audit reports in `context/tasks/phase3-research/`.
-Task context in `context/tasks/phase3-e2e-security-hardening.md`.
-Critical fixes task: `context/tasks/phase3-critical-fixes.md`.
+Task context in `context/tasks/05-phase3-e2e-security-hardening.md`.
+Critical fixes task: `context/tasks/06-phase3-critical-fixes.md`.
 
 ---
 
@@ -146,10 +146,10 @@ Backend security is now stable. Remaining tasks to complete MVP Core:
 
 | # | Task | Status | Context File |
 |---|------|--------|-------------|
-| 1 | **Complete Frontend Channel Visibility** | 🟡 IN PROGRESS | `frontend-channel-visibility-complete.md` |
-| 2 | **Frontend Permission Integration** | 🔴 Ready | `frontend-permission-integration.md` |
-| 3 | **Backend Channel Event Broadcasting** | 🔴 Ready | `backend-channel-event-broadcasting.md` |
-| 4 | **E2E User Journey Test** | 🔴 Ready | `e2e-user-journey-test.md` |
+| 1 | **Complete Frontend Channel Visibility** | 🟡 IN PROGRESS | `09-frontend-channel-visibility-complete.md` |
+| 2 | **Frontend Permission Integration** | 🔴 Ready | `11-frontend-permission-integration.md` |
+| 3 | **Backend Channel Event Broadcasting** | 🔴 Ready | `10-backend-channel-event-broadcasting.md` |
+| 4 | **E2E User Journey Test** | 🔴 Ready | `12-e2e-user-journey-test.md` |
 
 **Completion order:** 1 → 2 → 3 → 4
 
@@ -247,11 +247,11 @@ Do not track here unless a task explicitly asks:
 - Estimated 4 sessions total to MVP Core Complete
 
 ### New Task Contexts Created
-1. `frontend-channel-visibility-complete.md` — Real-time sync for all channel events
-2. `frontend-permission-integration.md` — Disable UI actions based on permissions
-3. `backend-channel-event-broadcasting.md` — Emit WS events on channel mutations
-4. `e2e-user-journey-test.md` — Full flow testing from bootstrap to message
-5. `gap-analysis-mvp-completion.md` — Master analysis document
+1. `09-frontend-channel-visibility-complete.md` — Real-time sync for all channel events
+2. `11-frontend-permission-integration.md` — Disable UI actions based on permissions
+3. `10-backend-channel-event-broadcasting.md` — Emit WS events on channel mutations
+4. `12-e2e-user-journey-test.md` — Full flow testing from bootstrap to message
+5. `07-gap-analysis-mvp-completion.md` — Master analysis document
 
 ### Verification Evidence
 ```bash
