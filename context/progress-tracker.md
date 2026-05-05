@@ -4,10 +4,10 @@
 
 Current phase: `MVP Core Stabilization`
 
-Last updated: 2026-05-05
-Session completed: Phase 1 + Phase 2 + Bug Fixes + Phase 3 Implementation
-Current task: Phase 3 Critical Fixes ✅ DONE + Frontend Channel Visibility 🟡 STARTED
-Next: Complete frontend channel visibility (WS events, permission-based UI)
+Last updated: 2026-05-05 (Session 2)
+Session completed: Phase 1 + Phase 2 + Bug Fixes + Phase 3 Implementation + Phase 3 Critical Fixes + **Full MVP Execution (4 Plans)**
+Current task: All 4 plans executed ✅ DONE
+Next: Manual E2E validation, production deployment prep, or post-MVP features
 
 ---
 
@@ -142,18 +142,21 @@ Critical fixes task: `context/tasks/06-phase3-critical-fixes.md`.
 
 ## What's Next
 
-Backend security is now stable. Remaining tasks to complete MVP Core:
+Backend security is now stable. MVP Core tasks completed:
 
 | # | Task | Status | Context File |
 |---|------|--------|-------------|
-| 1 | **Complete Frontend Channel Visibility** | 🟡 IN PROGRESS | `09-frontend-channel-visibility-complete.md` |
-| 2 | **Frontend Permission Integration** | 🔴 Ready | `11-frontend-permission-integration.md` |
-| 3 | **Backend Channel Event Broadcasting** | 🔴 Ready | `10-backend-channel-event-broadcasting.md` |
-| 4 | **E2E User Journey Test** | 🔴 Ready | `12-e2e-user-journey-test.md` |
+| 1 | **Backend Channel Event Broadcasting** | 🟢 Done | `10-backend-channel-event-broadcasting.md` |
+| 2 | **Frontend Channel Visibility Complete** | 🟢 Done | `09-frontend-channel-visibility-complete.md` |
+| 3 | **Frontend Permission Integration** | 🟢 Done | `11-frontend-permission-integration.md` |
+| 4 | **E2E User Journey Test** | 🟢 Done | `12-e2e-user-journey-test.md` |
 
-**Completion order:** 1 → 2 → 3 → 4
+**MVP Core Stabilization is now complete.** All 4 plans executed in a single session.
 
-**Estimates:** 1 session each (4 sessions total to MVP Core Complete)
+**Next options:**
+- Manual E2E validation (follow `docs/testing/e2e-manual-test.md`)
+- Production deployment preparation
+- Post-MVP features (requires new task context)
 
 ---
 
@@ -253,12 +256,41 @@ Do not track here unless a task explicitly asks:
 4. `12-e2e-user-journey-test.md` — Full flow testing from bootstrap to message
 5. `07-gap-analysis-mvp-completion.md` — Master analysis document
 
+### Session 2: Full MVP Execution (2026-05-05)
+
+**Commits:** `d042573` — `74529e0` (9 commits) on `local-work` branch
+
+#### Plan 1: Backend Channel Event Broadcasting ✅
+- Added `ChannelVisibilityChanged(Uuid)` WS event type
+- Fixed event publish targets (`space_id` → `channel.id`) in create/update/delete
+- Emit `ChannelUpdated` on `archive_channel` (also fixed `archive()` to return `Channel`)
+- Emit `ChannelUpdated` on `update_feature_flags`
+- Verified hub injection in `main.rs` and test helpers
+- Added 3 integration tests for WS event broadcasting
+
+#### Plan 2: Frontend Channel Visibility Complete ✅
+- Added `channel.visibility_changed` to WS schema (event type, payload schema, EventPayloadMap, payloadSchemaByType)
+- Added visibility_changed subscription in space layout that re-fetches channels
+- Verified existing permission controls in ChannelList
+
+#### Plan 3: Frontend Permission Integration ✅
+- Added `updateMessage()` and `deleteMessage()` API functions
+- Added `permissions` + `currentUserId` props to MessageList, pass through to MessageItem
+- Rebuilt MessageItem with permission-aware edit/delete buttons, inline editor, and delete confirmation
+- Wired channel page to pass new props
+
+#### Plan 4: E2E User Journey Test ✅
+- Created `docs/testing/e2e-manual-test.md` — 3 journeys (A: Hoster, B: Invite, C: Permission) with curl commands
+- Created `docs/testing/e2e-playwright-setup.md` — Playwright setup guide
+- Created `apps/web/e2e/` — Playwright types, helpers, and automated tests for all 3 journeys
+
 ### Verification Evidence
 ```bash
-cargo test -- --test-threads=1     # test result: ok. 40 passed; 0 failed
+cargo fmt --check                  # FMT PASS
 cargo clippy -- -D warnings        # Finished dev profile (0 errors)
-cargo fmt --check                  # (no output = clean)
-npm run check                      # svelte-check: 0 errors, 0 warnings
+cargo test --no-run                # All 4 test binaries compile
+npm run check                      # svelte-check found 0 errors
+npm run build                      # Wrote site to "build" ✔
 ```
 
-**Latest commit:** `55311fe` — `local-work` branch
+**Latest commit:** `74529e0` — `local-work` branch

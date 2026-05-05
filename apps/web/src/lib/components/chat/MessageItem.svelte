@@ -16,7 +16,7 @@
   } = $props();
 
   let editing = $state(false);
-  let editText = $state(message.content);
+  let editText = $state('');
   let deleting = $state(false);
 
   let presenceStatus = $derived(getPresence(message.author_user_id));
