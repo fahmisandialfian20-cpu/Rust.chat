@@ -222,6 +222,8 @@
       {hasMore}
       {loadingMore}
       readOnly={!canSendMessages}
+      {permissions}
+      {currentUserId}
       onloadMore={loadMore}
     />
     <TypingIndicator {channelId} currentUserId={currentUserId} />

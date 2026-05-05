@@ -9,6 +9,8 @@
     hasMore = false,
     loadingMore = false,
     readOnly = false,
+    permissions = [],
+    currentUserId = '',
     onloadMore,
   }: {
     messages: Message[];
@@ -16,6 +18,8 @@
     hasMore?: boolean;
     loadingMore?: boolean;
     readOnly?: boolean;
+    permissions?: string[];
+    currentUserId?: string;
     onloadMore?: () => void;
   } = $props();
 
@@ -72,7 +76,7 @@
       {/if}
 
       {#each messages as message (message.id)}
-        <MessageItem {message} />
+        <MessageItem {message} {permissions} {currentUserId} />
       {/each}
     </div>
   {/if}

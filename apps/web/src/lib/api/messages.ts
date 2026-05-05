@@ -69,3 +69,68 @@ export async function sendMessage(channelId: string, content: string): Promise<M
 
   return result.data;
 }
+
+export async function updateMessage(
+  channelId: string,
+  messageId: string,
+  content: string,
+): Promise<Message> {
+  const token = getAccessToken();
+  if (!token) {
+    throw { status: 401, message: 'Not authenticated' } satisfies ApiError;
+  }
+
+  const response = await fetch(
+    apiUrl(`/api/v1/channels/${channelId}/messages/${messageId}`),
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
+    },
+  );
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw { status: response.status, message: body.message ?? 'Request failed' } satisfies ApiError;
+  }
+
+  if (response.status === 204) {
+    return await response.json();
+  }
+
+  const data: unknown = await response.json();
+  const result = MessageSchema.safeParse(data);
+  if (!result.success) {
+    throw { status: 500, message: 'Invalid response from server' } satisfies ApiError;
+  }
+
+  return result.data;
+}
+
+export async function deleteMessage(
+  channelId: string,
+  messageId: string,
+): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw { status: 401, message: 'Not authenticated' } satisfies ApiError;
+  }
+
+  const response = await fetch(
+    apiUrl(`/api/v1/channels/${channelId}/messages/${messageId}`),
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw { status: response.status, message: body.message ?? 'Request failed' } satisfies ApiError;
+  }
+}
