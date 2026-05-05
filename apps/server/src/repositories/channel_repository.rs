@@ -220,18 +220,20 @@ impl ChannelRepository {
         Ok(row.into())
     }
 
-    pub async fn archive(&self, id: Uuid) -> Result<(), AppError> {
-        let _row = sqlx::query("UPDATE channels SET archived_at = $1 WHERE id = $2")
-            .bind(OffsetDateTime::now_utc())
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| match e {
-                sqlx::Error::RowNotFound => AppError::NotFound("Channel not found".to_string()),
-                _ => AppError::InternalServerError(e.to_string()),
-            })?;
+    pub async fn archive(&self, id: Uuid) -> Result<Channel, AppError> {
+        let row = sqlx::query_as::<_, SqlxChannel>(
+            "UPDATE channels SET archived_at = $1 WHERE id = $2 RETURNING id, space_id, parent_id, name, slug, kind, visibility, position, topic, created_by, archived_at, created_at, updated_at",
+        )
+        .bind(OffsetDateTime::now_utc())
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => AppError::NotFound("Channel not found".to_string()),
+            _ => AppError::InternalServerError(e.to_string()),
+        })?;
 
-        Ok(())
+        Ok(row.into())
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), AppError> {
