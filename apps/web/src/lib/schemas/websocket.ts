@@ -21,6 +21,7 @@ export const WS_EVENT_TYPES = [
   'presence.updated',
   'channel.created',
   'channel.updated',
+  'channel.deleted',
   'permission.updated',
   'member.joined',
   'member.left',
@@ -102,6 +103,11 @@ export const errorPayloadSchema = z.object({
 });
 export type ErrorPayload = z.infer<typeof errorPayloadSchema>;
 
+export const channelDeletedPayloadSchema = z.object({
+  channel_id: z.string().min(1),
+});
+export type ChannelDeletedPayload = z.infer<typeof channelDeletedPayloadSchema>;
+
 type EventPayloadMap = {
   'hello.ok': HelloOkPayload;
   'message.created': z.infer<typeof MessageSchema>;
@@ -111,6 +117,7 @@ type EventPayloadMap = {
   'presence.updated': PresenceUpdatedPayload;
   'channel.created': z.infer<typeof ChannelSchema>;
   'channel.updated': z.infer<typeof ChannelSchema>;
+  'channel.deleted': ChannelDeletedPayload;
   'permission.updated': PermissionUpdatedPayload;
   'member.joined': MemberJoinedPayload;
   'member.left': MemberLeftPayload;
@@ -153,6 +160,7 @@ const payloadSchemaByType: Record<string, z.ZodType<unknown>> = {
   'presence.updated': presenceUpdatedPayloadSchema,
   'channel.created': ChannelSchema,
   'channel.updated': ChannelSchema,
+  'channel.deleted': channelDeletedPayloadSchema,
   'permission.updated': permissionUpdatedPayloadSchema,
   'member.joined': memberJoinedPayloadSchema,
   'member.left': memberLeftPayloadSchema,

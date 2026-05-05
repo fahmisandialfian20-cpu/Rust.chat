@@ -5,6 +5,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
@@ -45,12 +46,16 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sessio
         session_id: session_id.clone(),
     });
 
-    if sender
-        .send(Message::Text(hello.to_json().into()))
-        .await
-        .is_err()
-    {
-        return;
+    match hello.to_json() {
+        Ok(json) => {
+            if sender.send(Message::Text(json.into())).await.is_err() {
+                return;
+            }
+        }
+        Err(e) => {
+            eprintln!("WS serialize error: {}", e);
+            return;
+        }
     }
 
     state.presence_service.set_online(user_id).await.ok();
@@ -66,6 +71,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sessio
     });
 
     let receive_task = tokio::spawn(async move {
+        let mut joined_channels: HashMap<Uuid, tokio::task::AbortHandle> = HashMap::new();
         while let Some(msg) = receiver.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
@@ -94,67 +100,106 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sessio
                                                 message: msg,
                                             },
                                         );
-                                        hub.publish_to_channel(channel_id, event.to_json()).await;
+                                        match event.to_json() {
+                                            Ok(json) => {
+                                                hub.publish_to_channel(channel_id, json).await;
+                                            }
+                                            Err(e) => {
+                                                eprintln!("WS serialize error: {}", e);
+                                            }
+                                        }
                                     }
                                     Err(e) => {
                                         let err = WsEvent::Error(ErrorData {
                                             code: "forbidden".to_string(),
                                             message: format!("{}", e),
                                         });
-                                        if cmd_tx.send(err.to_json()).is_err() {
-                                            break;
+                                        match err.to_json() {
+                                            Ok(json) => {
+                                                if cmd_tx.send(json).is_err() {
+                                                    break;
+                                                }
+                                            }
+                                            Err(e) => {
+                                                eprintln!("WS serialize error: {}", e);
+                                                break;
+                                            }
                                         }
                                     }
                                 }
                             }
                             WsCommand::JoinChannel { channel_id } => {
-                                let channel = state.channel_service.get_channel(channel_id).await;
-                                match channel {
-                                    Ok(ch) => {
-                                        let perm = state
-                                            .permission_service
-                                            .check(
-                                                user_id,
-                                                PermissionKey::ViewChannel,
-                                                Some(ch.space_id),
-                                                Some(channel_id),
-                                            )
-                                            .await;
-                                        if perm.is_ok() {
-                                            let rx = hub.subscribe(channel_id).await;
-                                            let forward_tx = cmd_tx.clone();
-                                            tokio::spawn(async move {
-                                                let mut rx = rx;
-                                                while let Ok(msg) = rx.recv().await {
-                                                    if forward_tx.send(msg).is_err() {
+                                if let std::collections::hash_map::Entry::Vacant(e) =
+                                    joined_channels.entry(channel_id)
+                                {
+                                    let channel =
+                                        state.channel_service.get_channel(channel_id).await;
+                                    match channel {
+                                        Ok(ch) => {
+                                            let perm = state
+                                                .permission_service
+                                                .check(
+                                                    user_id,
+                                                    PermissionKey::ViewChannel,
+                                                    Some(ch.space_id),
+                                                    Some(channel_id),
+                                                )
+                                                .await;
+                                            if perm.is_ok() {
+                                                let rx = hub.subscribe(channel_id).await;
+                                                let forward_tx = cmd_tx.clone();
+                                                let handle = tokio::spawn(async move {
+                                                    let mut rx = rx;
+                                                    while let Ok(msg) = rx.recv().await {
+                                                        if forward_tx.send(msg).is_err() {
+                                                            break;
+                                                        }
+                                                    }
+                                                });
+                                                e.insert(handle.abort_handle());
+                                            } else {
+                                                let err = WsEvent::Error(ErrorData {
+                                                    code: "forbidden".to_string(),
+                                                    message: "No permission to view channel"
+                                                        .to_string(),
+                                                });
+                                                match err.to_json() {
+                                                    Ok(json) => {
+                                                        if cmd_tx.send(json).is_err() {
+                                                            break;
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!("WS serialize error: {}", e);
                                                         break;
                                                     }
                                                 }
-                                            });
-                                        } else {
-                                            let err = WsEvent::Error(ErrorData {
-                                                code: "forbidden".to_string(),
-                                                message: "No permission to view channel"
-                                                    .to_string(),
-                                            });
-                                            if cmd_tx.send(err.to_json()).is_err() {
-                                                break;
                                             }
                                         }
-                                    }
-                                    Err(_) => {
-                                        let err = WsEvent::Error(ErrorData {
-                                            code: "not_found".to_string(),
-                                            message: "Channel not found".to_string(),
-                                        });
-                                        if cmd_tx.send(err.to_json()).is_err() {
-                                            break;
+                                        Err(_) => {
+                                            let err = WsEvent::Error(ErrorData {
+                                                code: "not_found".to_string(),
+                                                message: "Channel not found".to_string(),
+                                            });
+                                            match err.to_json() {
+                                                Ok(json) => {
+                                                    if cmd_tx.send(json).is_err() {
+                                                        break;
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("WS serialize error: {}", e);
+                                                    break;
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
-                            WsCommand::LeaveChannel { channel_id: _ } => {
-                                // Cleanup happens when the forward task drops its receiver
+                            WsCommand::LeaveChannel { channel_id } => {
+                                if let Some(handle) = joined_channels.remove(&channel_id) {
+                                    handle.abort();
+                                }
                             }
                             WsCommand::Typing {
                                 channel_id,

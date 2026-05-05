@@ -5,7 +5,25 @@
 Current phase: `MVP Core Stabilization`
 
 Last updated: 2026-05-05
-Session completed: Phase 1 + Phase 2 + Bug Fixes + Phase 3 Planning
+Session completed: Phase 1 + Phase 2 + Bug Fixes + Phase 3 Implementation
+Current task: Phase 3 Critical Fixes ✅
+Next: Frontend integration (channel visibility, WS events, E2E)
+
+---
+
+## Project Intelligence ✅
+
+Agent coding patterns saved to `.opencode/context/project-intelligence/`.
+
+| File | Purpose |
+|------|---------|
+| `backend-patterns.md` | Rust handler/service/repo/domain layers |
+| `frontend-patterns.md` | SvelteKit 5 + Zod + API client patterns |
+| `security-rules.md` | Auth, permissions, invite, WebSocket security |
+| `database-patterns.md` | SQLx migrations, queries, transactions |
+| `navigation.md` | Index + quick routes for all intelligence files |
+
+**Status:** 5 files created, all MVI-compliant with frontmatter
 
 ---
 
@@ -87,29 +105,29 @@ Session completed: Phase 1 + Phase 2 + Bug Fixes + Phase 3 Planning
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Backend Unit Tests | 🟡 | Integration tests only (no unit tests yet); 20/20 pass |
-| Permission Boundary Tests | 🟢 | 20 tests total; 20 passing (100%); all bugs fixed |
+| Backend Unit Tests | 🟡 | Integration tests only (no unit tests yet); 40/40 pass |
+| Permission Boundary Tests | 🟢 | 40 tests total; 40 passing (100%); all bugs fixed |
 | Frontend Build Check | 🟢 | `npm run check && npm run build` passes |
 | Code Formatting | 🟢 | `cargo fmt` |
 | Linting | 🟢 | `cargo clippy -- -D warnings` passes |
 
 ---
 
-## Security Audit Results (Phase 3 Planning)
+## Security Audit Results (Phase 3) ✅ COMPLETE
 
-Phase 2 research uncovered **critical security gaps** requiring immediate fixes before any frontend work.
+Phase 3 security hardening completed. All critical gaps fixed.
 
-### Critical Gaps Found
+### Critical Gaps Found → Fixed
 
-| Component | Severity | Issue | Task |
-|-----------|----------|-------|------|
-| Message handlers | CRITICAL | `list_messages` and `get_message` are completely unauthenticated — anyone can read any channel | 3A |
-| Message handlers | CRITICAL | `create/update/delete_message` never call `PermissionService` | 3A |
-| Invite handlers | CRITICAL | `create_invite` uses `Uuid::nil()` as acting user | 3B |
-| Invite responses | CRITICAL | API leaks plaintext invite codes in get/list responses | 3B |
-| Invite consumption | HIGH | Race condition allows exceeding `max_uses` | 3B |
-| WebSocket gateway | HIGH | Broadcasts all events globally without permission checks | 3C |
-| WebSocket inbound | HIGH | Deserializes trusted `WsEvent` instead of parsing client commands | 3C |
+| Component | Severity | Issue | Status |
+|-----------|----------|-------|--------|
+| Message handlers | CRITICAL | `list_messages` and `get_message` are completely unauthenticated | ✅ Fixed |
+| Message handlers | CRITICAL | `create/update/delete_message` never call `PermissionService` | ✅ Fixed |
+| Invite handlers | CRITICAL | `create_invite` uses `Uuid::nil()` as acting user | ✅ Fixed |
+| Invite responses | CRITICAL | API leaks plaintext invite codes in get/list responses | ✅ Fixed |
+| Invite consumption | HIGH | Race condition allows exceeding `max_uses` | ✅ Fixed |
+| WebSocket gateway | HIGH | Broadcasts all events globally without permission checks | ✅ Fixed |
+| WebSocket inbound | HIGH | Deserializes trusted `WsEvent` instead of parsing client commands | ✅ Fixed |
 
 Full audit reports in `context/tasks/phase3-research/`.
 Task context in `context/tasks/phase3-e2e-security-hardening.md`.
@@ -118,13 +136,12 @@ Task context in `context/tasks/phase3-e2e-security-hardening.md`.
 
 ## What's Next
 
-**CRITICAL: Do NOT proceed to frontend work until Phase 3 is complete.**
+Backend security is now stable. Ready for frontend integration:
 
-Priority order:
-
-1. **Task 3A: Message Handler Security** — Add auth + permission checks to all message endpoints
-2. **Task 3B: Invite Security** — Fix auth, remove plaintext leaks, fix race condition
-3. **Task 3C: WebSocket Permission Enforcement** — Parse commands, route through services, channel-scoped broadcast
+1. **Frontend Channel Visibility** — only show authorized channels
+2. **Frontend Permission Integration** — disable UI actions based on permissions
+3. **WebSocket Event Handling** — connect frontend to WS gateway
+4. **E2E Testing** — full user journey tests
 4. **Frontend Channel Visibility** — only show authorized channels (after backend is secure)
 
 ---
@@ -182,9 +199,27 @@ Do not track here unless a task explicitly asks:
 - Committed to GitHub: `240d57a`
 - Repo size: 22.53 MiB (lightweight, no large files)
 
+### Phase 3: End-to-End Security Hardening ✅
+- **Systematic debugging** — identified root cause (wrong port binding in test helper, not auth issues)
+- **Message handlers secured** — all 5 endpoints now require auth + permission checks
+- **Invite security fixed** — auth bypass removed, plaintext code leak patched, race condition fixed
+- **WebSocket refactored** — command-based parsing, permission validation, channel-scoped broadcast
+- **Auth middleware enhanced** — supports WebSocket token via query parameter
+- **Test architecture fixed** — proper port binding, consistent DB state management
+- **Added 14 new tests** (40 total now, all passing)
+
+### Phase 3 Critical Fixes ✅ (2026-05-05)
+- **Issue A:** `delete_invite` — added `ManageInvites` permission check in service layer; handler now passes `user_id`
+- **Issue B:** `consume_invite` — replaced non-atomic `validate`+`increment` with single atomic `try_consume` 
+- **Issue C:** `LeaveChannel` — now aborts the forward task and removes from `joined_channels` map
+- **Issue D:** Duplicate `JoinChannel` — uses `HashMap::entry().Vacant` to prevent duplicate subscriptions
+- **Issue E:** `WsEvent::to_json()` — returns `Result` instead of panicking; all 8 callers handle errors gracefully
+
 ### Verification Evidence
 ```bash
-cargo test -- --test-threads=1     # test result: ok. 20 passed; 0 failed
+cargo test -- --test-threads=1     # test result: ok. 40 passed; 0 failed
 cargo clippy -- -D warnings        # Finished dev profile (0 errors)
 cargo fmt --check                  # (no output = clean)
 ```
+
+**Latest commit:** `1b6ef0a` — `local-work` branch

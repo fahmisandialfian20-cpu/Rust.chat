@@ -2,6 +2,8 @@ use crate::domain::channel::{
     Channel, ChannelFeatureFlags, ChannelFeatureFlagsUpdate, CreateChannel, UpdateChannel,
 };
 use crate::error::AppError;
+use crate::realtime::events::WsEvent;
+use crate::realtime::RealtimeHub;
 use crate::repositories::channel_repository::ChannelRepository;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -9,11 +11,12 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct ChannelService {
     repository: Arc<ChannelRepository>,
+    hub: Arc<RealtimeHub>,
 }
 
 impl ChannelService {
-    pub fn new(repository: Arc<ChannelRepository>) -> Self {
-        Self { repository }
+    pub fn new(repository: Arc<ChannelRepository>, hub: Arc<RealtimeHub>) -> Self {
+        Self { repository, hub }
     }
 
     pub async fn create_channel(
@@ -62,6 +65,10 @@ impl ChannelService {
             )
             .await?;
 
+        if let Ok(json) = WsEvent::ChannelCreated(channel.clone()).to_json() {
+            self.hub.publish_to_channel(space_id, json).await;
+        }
+
         Ok(channel)
     }
 
@@ -103,9 +110,16 @@ impl ChannelService {
         channel_id: Uuid,
         input: UpdateChannel,
     ) -> Result<Channel, AppError> {
-        self.repository
+        let channel = self.repository.find_by_id(channel_id).await?;
+        let space_id = channel.space_id;
+        let updated = self
+            .repository
             .update(channel_id, input.name, input.topic, input.visibility)
-            .await
+            .await?;
+        if let Ok(json) = WsEvent::ChannelUpdated(updated.clone()).to_json() {
+            self.hub.publish_to_channel(space_id, json).await;
+        }
+        Ok(updated)
     }
 
     pub async fn archive_channel(&self, channel_id: Uuid) -> Result<(), AppError> {
@@ -113,7 +127,13 @@ impl ChannelService {
     }
 
     pub async fn delete_channel(&self, channel_id: Uuid) -> Result<(), AppError> {
-        self.repository.delete(channel_id).await
+        let channel = self.repository.find_by_id(channel_id).await?;
+        let space_id = channel.space_id;
+        self.repository.delete(channel_id).await?;
+        if let Ok(json) = WsEvent::ChannelDeleted(channel_id).to_json() {
+            self.hub.publish_to_channel(space_id, json).await;
+        }
+        Ok(())
     }
 
     pub async fn get_feature_flags(

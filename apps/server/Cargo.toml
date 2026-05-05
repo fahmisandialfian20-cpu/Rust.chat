@@ -46,3 +46,6 @@ livekit-api     = { version = "0.4.19", features = ["access-token"] }
 
 utoipa          = { version = "5", features = ["axum_extras", "uuid", "time"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
+
+[dev-dependencies]
+tokio-tungstenite = "0.24"

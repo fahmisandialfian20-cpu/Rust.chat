@@ -134,6 +134,7 @@ pub async fn setup_test_app() -> (axum::Router, PgPool) {
     let audit_service = AuditService::new(audit_repo, permission_service.clone());
     let rate_limiter = RateLimiter::new(redis_conn.clone());
     let role_service = RoleService::new(role_repo.clone(), permission_service.clone());
+    let realtime_hub = Arc::new(rust_chat_server::realtime::hub::RealtimeHub::default());
 
     let state = AppState {
         db: pool.clone(),
@@ -143,7 +144,7 @@ pub async fn setup_test_app() -> (axum::Router, PgPool) {
         auth_service,
         file_service,
         space_service: SpaceService::new(space_repo.clone(), role_repo.clone()),
-        channel_service: ChannelService::new(channel_repo.clone()),
+        channel_service: ChannelService::new(channel_repo.clone(), realtime_hub.clone()),
         invite_service: InviteService::new(
             invite_repo,
             space_repo.clone(),
@@ -162,7 +163,7 @@ pub async fn setup_test_app() -> (axum::Router, PgPool) {
         audit_service,
         role_service,
         rate_limiter,
-        realtime_hub: Arc::new(rust_chat_server::realtime::hub::RealtimeHub::default()),
+        realtime_hub,
     };
 
     let app = axum::Router::new()

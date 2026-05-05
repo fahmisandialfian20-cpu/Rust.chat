@@ -5,6 +5,7 @@ pub mod files;
 pub mod invites;
 pub mod media;
 pub mod messages;
+pub mod permissions;
 pub mod profile;
 pub mod roles;
 pub mod spaces;

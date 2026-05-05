@@ -182,3 +182,26 @@ export async function updateChannelFlags(spaceId: string, channelId: string, fla
   const data: unknown = await response.json();
   return data as FeatureFlags;
 }
+
+export async function getMyPermissions(spaceId: string): Promise<string[]> {
+  const token = getAccessToken();
+  if (!token) {
+    throw { status: 401, message: 'Not authenticated' } satisfies ApiError;
+  }
+
+  const response = await fetch(apiUrl(`/api/v1/spaces/${spaceId}/my-permissions`), {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw { status: response.status, message: body.message ?? 'Request failed' } satisfies ApiError;
+  }
+
+  const data: unknown = await response.json();
+  return data as string[];
+}

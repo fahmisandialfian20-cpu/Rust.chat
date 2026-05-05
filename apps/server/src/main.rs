@@ -77,10 +77,10 @@ async fn main() {
     ));
 
     let space_service = SpaceService::new(space_repo.clone(), role_repo.clone());
-    let channel_service = ChannelService::new(channel_repo.clone());
+    let realtime_hub = Arc::new(rust_chat_server::realtime::hub::RealtimeHub::default());
+    let channel_service = ChannelService::new(channel_repo.clone(), realtime_hub.clone());
     let presence_service = PresenceService::new(redis.clone());
     let typing_service = TypingService::new(redis.clone());
-    let realtime_hub = Arc::new(rust_chat_server::realtime::hub::RealtimeHub::default());
 
     let permission_service = PermissionService::new(db.clone());
     let invite_service = InviteService::new(
@@ -155,6 +155,7 @@ async fn main() {
         .nest("/api/v1", rust_chat_server::handlers::admin::router())
         .nest("/api/v1", rust_chat_server::handlers::roles::router())
         .nest("/api/v1", rust_chat_server::handlers::profile::router())
+        .nest("/api/v1", rust_chat_server::handlers::permissions::router())
         .merge(SwaggerUi::new("/api/v1/docs").url("/api/v1/docs/openapi.json", ApiDoc::openapi()))
         .layer(
             ServiceBuilder::new()

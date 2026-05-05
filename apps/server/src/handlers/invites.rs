@@ -174,8 +174,11 @@ pub async fn delete_invite(
     auth_user: AuthUser,
     Path(invite_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let _user_id = auth_user.user_id_uuid()?;
-    state.invite_service.delete_invite(invite_id).await?;
+    let user_id = auth_user.user_id_uuid()?;
+    state
+        .invite_service
+        .delete_invite(user_id, invite_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

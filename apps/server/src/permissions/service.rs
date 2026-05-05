@@ -70,4 +70,59 @@ impl PermissionService {
         }
         Ok(false)
     }
+
+    pub async fn list_user_permissions(
+        &self,
+        user_id: Uuid,
+        space_id: Uuid,
+    ) -> Result<Vec<String>, AppError> {
+        let all_keys = [
+            PermissionKey::ManageInstance,
+            PermissionKey::ManageSpaces,
+            PermissionKey::ManageRoles,
+            PermissionKey::ManageMembers,
+            PermissionKey::ManageChannels,
+            PermissionKey::ManageInvites,
+            PermissionKey::ViewAuditLog,
+            PermissionKey::ViewSpace,
+            PermissionKey::ViewChannel,
+            PermissionKey::ReadMessages,
+            PermissionKey::SendMessages,
+            PermissionKey::EditOwnMessage,
+            PermissionKey::DeleteOwnMessage,
+            PermissionKey::EditAnyMessage,
+            PermissionKey::DeleteAnyMessage,
+            PermissionKey::PinMessages,
+            PermissionKey::MentionEveryone,
+            PermissionKey::SendFiles,
+            PermissionKey::CreateThreads,
+            PermissionKey::ManageThreads,
+            PermissionKey::AddReactions,
+            PermissionKey::JoinVoice,
+            PermissionKey::StartVoice,
+            PermissionKey::JoinVideo,
+            PermissionKey::StartVideo,
+            PermissionKey::ShareScreen,
+            PermissionKey::KickMembers,
+            PermissionKey::BanMembers,
+            PermissionKey::MuteMembers,
+            PermissionKey::ManageModeration,
+            PermissionKey::CustomizeOwnProfile,
+            PermissionKey::CustomizeSpace,
+            PermissionKey::UseWebhooks,
+        ];
+
+        let mut allowed = Vec::new();
+        for key in all_keys {
+            if self
+                .resolver
+                .check(user_id, key, Some(space_id), None)
+                .await?
+                .is_allowed()
+            {
+                allowed.push(key.as_str().to_string());
+            }
+        }
+        Ok(allowed)
+    }
 }

@@ -90,11 +90,8 @@ impl InviteService {
     }
 
     pub async fn consume_invite(&self, code: &str) -> Result<Invite, AppError> {
-        let invite = self.validate_invite(code).await?;
-
-        self.repository.increment_used_count(invite.id).await?;
-
-        Ok(invite)
+        let invite = self.repository.find_by_code(code).await?;
+        self.repository.try_consume(invite.id).await
     }
 
     pub async fn accept_invite(&self, code: &str, user_id: Uuid) -> Result<String, AppError> {
@@ -130,7 +127,14 @@ impl InviteService {
         self.repository.find_by_space(space_id, limit, offset).await
     }
 
-    pub async fn delete_invite(&self, invite_id: Uuid) -> Result<(), AppError> {
+    pub async fn delete_invite(&self, user_id: Uuid, invite_id: Uuid) -> Result<(), AppError> {
+        let invite = self.repository.find_by_id(invite_id).await?;
+        let space_id = invite
+            .space_id
+            .ok_or_else(|| AppError::BadRequest("Invite has no space".to_string()))?;
+        self.permission_service
+            .check(user_id, PermissionKey::ManageInvites, Some(space_id), None)
+            .await?;
         self.repository.delete(invite_id).await
     }
 }

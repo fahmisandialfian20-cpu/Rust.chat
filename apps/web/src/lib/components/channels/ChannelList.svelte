@@ -3,15 +3,22 @@
   import { MessageSquare, Mic, Video } from 'lucide-svelte';
   import type { Channel } from '$lib/schemas/channels';
 
-  let { channels = [] }: { channels: Channel[] } = $props();
+  let { channels = [], permissions = [] }: { channels: Channel[]; permissions: string[] } = $props();
 
   let sorted = $derived([...channels].sort((a, b) => a.position - b.position));
   let activeChannelId = $derived((page.params as Record<string, string>).channelId);
+  let canManageChannels = $derived(permissions.includes('manage_channels'));
 </script>
 
 {#if sorted.length === 0}
   <div class="flex flex-col items-center justify-center px-4 py-12 text-center">
-    <p class="text-sm text-rc-500">No visible channels</p>
+    {#if canManageChannels}
+      <p class="text-sm text-rc-500">No channels yet.</p>
+      <p class="mt-1 text-xs text-rc-600">Create your first channel to get started.</p>
+    {:else}
+      <p class="text-sm text-rc-500">No visible channels</p>
+      <p class="mt-1 text-xs text-rc-600">Ask an admin to grant you access.</p>
+    {/if}
   </div>
 {:else}
   <nav class="space-y-0.5 px-2 py-2" aria-label="Channel list">
@@ -34,5 +41,16 @@
         <span class="truncate"># {channel.name}</span>
       </a>
     {/each}
+    {#if canManageChannels}
+      <div class="px-2 pt-2">
+        <a
+          href="/spaces/{page.params.spaceId}/admin/channels"
+          class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-rc-400 transition hover:bg-white/5 hover:text-rc-200"
+        >
+          <span class="text-lg leading-none">+</span>
+          <span>Add Channel</span>
+        </a>
+      </div>
+    {/if}
   </nav>
 {/if}
